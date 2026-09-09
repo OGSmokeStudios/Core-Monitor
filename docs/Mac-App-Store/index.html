@@ -3,17 +3,17 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="light dark">
   <title>Core-Monitor Is Available on the Mac App Store | macOS</title>
   <meta name="description" content="Core-Monitor is available free on the Mac App Store at Apple app ID 6762558526. The sandboxed macOS edition monitors CPU, memory, storage, battery, network, and thermal state.">
   <meta name="application-name" content="Core-Monitor">
   <meta name="apple-mobile-web-app-title" content="Core-Monitor">
   <meta name="robots" content="index,follow,max-image-preview:large">
-  <meta name="theme-color" content="#07080b" media="(prefers-color-scheme: dark)">
-  <meta name="theme-color" content="#f1f2ef" media="(prefers-color-scheme: light)">
+  <meta name="theme-color" content="#e8eaec" media="(prefers-color-scheme: light)">
+  <meta name="theme-color" content="#16191c" media="(prefers-color-scheme: dark)">
   <link rel="canonical" href="https://offyotto.github.io/Core-Monitor/Mac-App-Store/">
   <link rel="icon" href="../favicon.ico?v=6" sizes="any">
   <link rel="icon" type="image/png" sizes="512x512" href="../images/site/core-monitor-logo.png?v=6">
-  <link rel="shortcut icon" href="../images/site/core-monitor-logo.png?v=6">
   <link rel="apple-touch-icon" href="../images/site/core-monitor-logo.png?v=6">
   <meta property="og:site_name" content="Core-Monitor">
   <meta property="og:type" content="website">
@@ -26,11 +26,9 @@
   <meta name="twitter:title" content="Core-Monitor on the Mac App Store">
   <meta name="twitter:description" content="Core-Monitor is available free on the Mac App Store.">
   <meta name="twitter:image" content="https://offyotto.github.io/Core-Monitor/images/ui/mac-app-store/app-store-dashboard.png">
-  <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@500;600&family=Space+Grotesk:wght@500;600;700&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="../styles.css?v=9">
-  <link rel="stylesheet" href="https://unpkg.com/lenis@1.3.23/dist/lenis.css">
+  <link rel="preload" as="font" type="font/woff2" href="../fonts/bricolage-grotesque-latin.woff2" crossorigin>
+  <link rel="stylesheet" href="../styles.css?v=20">
+  <script src="../script.js?v=9" defer></script>
   <script type="application/ld+json">
   {
     "@context": "https://schema.org",
@@ -84,113 +82,110 @@
   </script>
 </head>
 <body>
-  <a class="skip-link" href="#main">Skip to content</a>
+  <a class="skiplink" href="#main">Skip to content</a>
 
-  <header class="site-header">
-    <div class="wrap header-row">
-      <a class="brand" href="../">
-        <img class="brand-mark" src="../images/site/core-monitor-logo.png?v=6" alt="Core-Monitor app icon">
-        <span class="brand-text">Core-Monitor</span>
+  <header class="topbar">
+    <div class="shell topbar-inner">
+      <a class="wordmark" href="../">
+        <img src="../images/site/core-monitor-logo.png?v=6" alt="" width="27" height="27">
+        Core-Monitor
       </a>
-      <div class="header-actions">
-        <a class="btn btn-ghost btn-sm" href="support/">Support</a>
-        <a class="btn btn-ghost btn-sm" href="privacy/">Privacy</a>
-        <a class="icon-link" href="https://github.com/offyotto/Core-Monitor" aria-label="Core-Monitor on GitHub" title="Core-Monitor on GitHub">
-          <picture>
-            <source media="(prefers-color-scheme: light)" srcset="../images/site/github-mark.png">
-            <img src="../images/site/github-mark-light.png" alt="" width="24" height="24">
-          </picture>
-        </a>
-        <a class="btn btn-solid btn-sm" href="https://apps.apple.com/us/app/core-monitor/id6762558526?mt=12">View on App Store</a>
-      </div>
+      <nav class="site-menu" aria-label="Pages">
+        <a href="support/">Support</a>
+        <a href="privacy/">Privacy</a>
+        <a href="https://github.com/offyotto/Core-Monitor">GitHub</a>
+      </nav>
+      <a class="act act-heat act-sm" href="https://apps.apple.com/us/app/core-monitor/id6762558526?mt=12">View on App Store</a>
     </div>
   </header>
 
   <main id="main">
-    <section class="wrap intro">
-      <h1>Core-Monitor is available on the Mac App Store</h1>
-      <p class="hero-text">Core-Monitor is listed as a free macOS app at Apple app ID 6762558526. Apple reviews, signs and delivers this sandboxed edition. It reads and displays system data but does not write to hardware. If fan control matters to you, the <a href="../">direct download</a> is the build to use instead.</p>
-      <div class="btn-group">
-        <a class="btn btn-solid" href="https://apps.apple.com/us/app/core-monitor/id6762558526?mt=12">Open the Apple listing</a>
-        <a class="btn btn-outline" href="#scope">What is in this edition</a>
+    <section class="shell page-lede">
+      <h1>Core-Monitor is on the Mac App Store</h1>
+      <p class="lede-sub">Core-Monitor is listed as a free macOS app at Apple app ID 6762558526. Apple reviews, signs and delivers this sandboxed edition. It reads and displays system data but does not write to hardware. If fan control matters to you, the <a href="../">direct download</a> is the build to use instead.</p>
+      <div class="action-row">
+        <a class="act act-heat" href="https://apps.apple.com/us/app/core-monitor/id6762558526?mt=12">Open the Apple listing</a>
+        <a class="act act-line" href="#scope">What is in this edition</a>
       </div>
     </section>
 
-    <section class="wrap section section-tight">
-      <div class="gallery" style="grid-template-columns: repeat(2, 1fr);">
-        <figure class="gallery-item" data-reveal>
-          <img src="../images/ui/mac-app-store/app-store-dashboard.png" alt="App Store edition dashboard with CPU activity, memory, thermal state and weather cards." loading="lazy">
-          <figcaption class="gallery-caption"><strong>Dashboard</strong></figcaption>
+    <section class="band">
+      <div class="shell duo">
+        <figure class="bezel">
+          <img src="../images/ui/mac-app-store/app-store-dashboard.png" alt="App Store edition dashboard with CPU activity, memory, thermal state and weather cards." loading="lazy" decoding="async">
+          <figcaption>Dashboard</figcaption>
         </figure>
-        <figure class="gallery-item" data-reveal>
-          <img src="../images/ui/mac-app-store/app-store-menubar.png" alt="App Store edition menu bar extra with a live status summary." loading="lazy">
-          <figcaption class="gallery-caption"><strong>Menu bar extra</strong></figcaption>
+        <figure class="bezel">
+          <img src="../images/ui/mac-app-store/app-store-menubar.png" alt="App Store edition menu bar extra with a live status summary." loading="lazy" decoding="async">
+          <figcaption>Menu bar extra</figcaption>
         </figure>
       </div>
     </section>
 
-    <section class="wrap section" id="scope">
-      <div class="section-head">
-        <h2>Exactly what the sandbox allows</h2>
-        <p>App Store rules shape this edition, so the boundaries are written down plainly instead of left implied.</p>
-      </div>
-      <div class="ledger">
-        <div class="ledger-col" data-reveal>
-          <h3>Included</h3>
-          <ul>
-            <li>Overall CPU activity and per-core load</li>
-            <li>Memory usage and pressure</li>
-            <li>Network throughput and startup disk usage</li>
-            <li>Battery status, thermal state, uptime and load averages</li>
-            <li>Live Weather, only after you enable it and grant location access</li>
-            <li>SwiftUI dashboard and a menu bar extra</li>
-          </ul>
+    <section class="band" id="scope">
+      <div class="shell">
+        <div class="band-head">
+          <h2>Exactly what the sandbox allows</h2>
+          <p>App Store rules shape this edition, so the boundaries are written down plainly instead of left implied.</p>
         </div>
-        <div class="ledger-col is-out" data-reveal>
-          <h3>Left out, by design</h3>
-          <ul>
-            <li>Privileged helper and background services</li>
-            <li>Fan control and any hardware writes</li>
-            <li>Direct sensor access and private frameworks</li>
-            <li>Touch Bar overlays and custom widgets</li>
-            <li>Shell commands and self-updating</li>
-          </ul>
+        <div class="duo">
+          <div class="tally">
+            <h3>Included</h3>
+            <ul>
+              <li>Overall CPU activity and per-core load</li>
+              <li>Memory usage and pressure</li>
+              <li>Network throughput and startup disk usage</li>
+              <li>Battery status, thermal state, uptime and load averages</li>
+              <li>Live Weather, only after you enable it and grant location access</li>
+              <li>SwiftUI dashboard and a menu bar extra</li>
+            </ul>
+          </div>
+          <div class="tally is-out">
+            <h3>Left out, by design</h3>
+            <ul>
+              <li>Privileged helper and background services</li>
+              <li>Fan control and any hardware writes</li>
+              <li>Direct sensor access and private frameworks</li>
+              <li>Touch Bar overlays and custom widgets</li>
+              <li>Shell commands and self-updating</li>
+            </ul>
+          </div>
         </div>
       </div>
     </section>
 
-    <section class="wrap section">
-      <div class="cards">
-        <article class="card" data-reveal>
+    <section class="band">
+      <div class="shell trio">
+        <article>
           <h3>Installed by Apple</h3>
           <p>Reviewed, signed and updated through the App Store, inside the standard sandbox that comes with it.</p>
         </article>
-        <article class="card is-cool" data-reveal>
+        <article>
           <h3>WeatherKit, on request</h3>
           <p>Live Weather is off by default. Turn on Enable Live Weather in Settings to request location access; decline, and the rest of the app runs unchanged.</p>
         </article>
-        <article class="card" data-reveal>
+        <article>
           <h3>Nothing collected</h3>
           <p>No account, no analytics, no advertising code. The <a href="privacy/">privacy policy</a> is a short read on purpose.</p>
         </article>
       </div>
     </section>
 
-    <section class="cta">
-      <div class="wrap cta-inner">
+    <section class="coda">
+      <div class="shell">
         <h2>Get it from the App Store.</h2>
-        <div class="btn-group">
-          <a class="btn btn-solid" href="https://apps.apple.com/us/app/core-monitor/id6762558526?mt=12">Open the Apple listing</a>
-          <a class="btn btn-outline" href="support/">Get support</a>
+        <div class="action-row">
+          <a class="act act-heat" href="https://apps.apple.com/us/app/core-monitor/id6762558526?mt=12">Open the Apple listing</a>
+          <a class="act act-line" href="support/">Get support</a>
         </div>
       </div>
     </section>
   </main>
 
-  <footer class="site-footer">
-    <div class="wrap footer-row">
-      <p class="footer-brand"><img src="../images/site/core-monitor-logo.png?v=6" alt="" width="22" height="22">Core-Monitor</p>
-      <nav class="footer-nav" aria-label="Footer">
+  <footer class="basefoot">
+    <div class="shell basefoot-row">
+      <p class="basefoot-brand"><img src="../images/site/core-monitor-logo.png?v=6" alt="" width="21" height="21">Core-Monitor</p>
+      <nav class="basefoot-nav" aria-label="Footer">
         <a href="../">Home</a>
         <a href="https://github.com/offyotto/Core-Monitor">GitHub</a>
         <a href="https://github.com/offyotto/Core-Monitor/releases/latest">Releases</a>
@@ -199,8 +194,5 @@
       </nav>
     </div>
   </footer>
-
-  <script src="https://unpkg.com/lenis@1.3.23/dist/lenis.min.js"></script>
-  <script src="../script.js?v=6"></script>
 </body>
 </html>
