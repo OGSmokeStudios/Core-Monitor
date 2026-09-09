@@ -1,309 +1,106 @@
 /* ==========================================================================
-   Core-Monitor site behaviour
+   Core-Monitor site behaviour — bench instrument edition
 
-   Everything here is a progressive enhancement: the page is fully readable,
-   navigable and usable with this file blocked or broken. Nothing here is
-   load-bearing, so no content can ever be left hidden by a JavaScript
-   failure.
-
-   No third-party libraries. The one network request is a cached lookup of
-   the repository's star count, and the page already ships a truthful,
-   crawlable milestone for it.
+   Everything here is progressive enhancement. With this file blocked the
+   page stays fully readable: the fan curve renders fully drawn, navigation and copy fall back
+   to plain HTML behaviour. No libraries, no network requests.
    ========================================================================== */
 
 (function () {
   "use strict";
 
   var doc = document;
+  var reducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)");
 
-  var closest = function (node, selector) {
-    return node && node.closest ? node.closest(selector) : null;
-  };
+  /* ---------- mobile menu ---------- */
 
-  /* ---------- sticky header gets a shadow once you leave the top ---------- */
+  var menuBtn = doc.querySelector("[data-menu-btn]");
+  var menu = doc.querySelector("[data-menu]");
 
-  var header = doc.querySelector(".site-header");
-  if (header) {
-    var syncHeader = function () {
-      header.classList.toggle("is-scrolled", window.scrollY > 8);
-    };
-    syncHeader();
-    window.addEventListener("scroll", syncHeader, { passive: true });
-  }
-
-  /* ---------- mobile navigation ---------- */
-
-  var toggle = doc.querySelector(".nav-toggle");
-  var nav = doc.getElementById("primary-nav");
-
-  if (toggle && nav) {
-    var setNav = function (open) {
-      nav.classList.toggle("is-open", open);
-      toggle.setAttribute("aria-expanded", open ? "true" : "false");
-      toggle.setAttribute("aria-label", open ? "Close menu" : "Open menu");
+  if (menuBtn && menu) {
+    var setMenu = function (open) {
+      menu.classList.toggle("is-open", open);
+      menuBtn.setAttribute("aria-expanded", open ? "true" : "false");
+      menuBtn.textContent = open ? "Close" : "Menu";
     };
 
-    var navIsOpen = function () {
-      return nav.classList.contains("is-open");
-    };
-
-    setNav(false);
-
-    toggle.addEventListener("click", function () {
-      setNav(!navIsOpen());
+    menuBtn.addEventListener("click", function () {
+      setMenu(!menu.classList.contains("is-open"));
     });
 
-    // Tapping a section link should close the sheet behind you.
-    nav.addEventListener("click", function (event) {
-      if (closest(event.target, "a")) setNav(false);
+    menu.addEventListener("click", function (event) {
+      if (event.target.closest("a")) setMenu(false);
     });
 
     doc.addEventListener("keydown", function (event) {
-      if (event.key === "Escape" && navIsOpen()) {
-        setNav(false);
-        toggle.focus();
+      if (event.key === "Escape" && menu.classList.contains("is-open")) {
+        setMenu(false);
+        menuBtn.focus();
       }
     });
-
-    doc.addEventListener("click", function (event) {
-      if (!navIsOpen()) return;
-      if (nav.contains(event.target) || toggle.contains(event.target)) return;
-      setNav(false);
-    });
   }
 
-  /* ---------- scroll spy: highlight the section you are reading ---------- */
+  /* ---------- copy-to-clipboard ---------- */
 
-  var navLinks = Array.prototype.slice.call(
-    doc.querySelectorAll('.primary-nav a[href^="#"]')
-  );
+  var copyStatus = doc.getElementById("copy-status");
 
-  if (navLinks.length && "IntersectionObserver" in window) {
-    var linkFor = {};
-    var sections = [];
+  doc.querySelectorAll("[data-copy]").forEach(function (button) {
+    var resting = button.textContent;
+    var timer = null;
 
-    navLinks.forEach(function (link) {
-      var id = link.getAttribute("href").slice(1);
-      var section = id ? doc.getElementById(id) : null;
-      if (!section) return;
-      linkFor[id] = link;
-      sections.push(section);
-    });
-
-    var onScreen = {};
-
-    var paintCurrent = function () {
-      var current = null;
-      sections.forEach(function (section) {
-        if (!current && onScreen[section.id]) current = section.id;
-      });
-
-      navLinks.forEach(function (link) {
-        if (current && linkFor[current] === link) {
-          link.setAttribute("aria-current", "true");
-        } else {
-          link.removeAttribute("aria-current");
-        }
-      });
-    };
-
-    var spy = new IntersectionObserver(
-      function (entries) {
-        entries.forEach(function (entry) {
-          onScreen[entry.target.id] = entry.isIntersecting;
-        });
-        paintCurrent();
-      },
-      { rootMargin: "-30% 0px -60% 0px" }
-    );
-
-    sections.forEach(function (section) {
-      spy.observe(section);
-    });
-  }
-
-  /* ---------- copy-to-clipboard buttons ---------- */
-
-  var liveRegion = doc.getElementById("copy-status");
-
-  var announce = function (message) {
-    if (liveRegion) liveRegion.textContent = message;
-  };
-
-  Array.prototype.slice
-    .call(doc.querySelectorAll("[data-copy]"))
-    .forEach(function (button) {
-      var restingLabel = button.textContent;
-      var resetTimer = null;
+    button.addEventListener("click", function () {
+      var source = doc.getElementById(button.getAttribute("data-copy"));
+      var text = source ? source.textContent.replace(/\s+$/, "") : "";
 
       var settle = function (ok) {
         button.textContent = ok ? "Copied" : "Copy failed";
-        button.setAttribute("data-state", ok ? "done" : "failed");
-        announce(
-          ok
+        if (ok) button.setAttribute("data-state", "done");
+        else button.setAttribute("data-state", "failed");
+        if (copyStatus) {
+          copyStatus.textContent = ok
             ? "Command copied to the clipboard."
-            : "Copying failed. Select the command and copy it manually."
-        );
-
-        window.clearTimeout(resetTimer);
-        resetTimer = window.setTimeout(function () {
-          button.textContent = restingLabel;
+            : "Copying failed. Select the command and copy it manually.";
+        }
+        window.clearTimeout(timer);
+        timer = window.setTimeout(function () {
+          button.textContent = resting;
           button.removeAttribute("data-state");
-          announce("");
-        }, 2400);
+          if (copyStatus) copyStatus.textContent = "";
+        }, 2200);
       };
 
-      button.addEventListener("click", function () {
-        // data-copy holds a selector pointing at the block to copy, so the
-        // command itself lives in exactly one place: the markup people read.
-        var raw = button.getAttribute("data-copy") || "";
-        var text = raw;
-
-        if (raw.charAt(0) === "#") {
-          var source = doc.getElementById(raw.slice(1));
-          if (source) text = source.textContent;
-        }
-
-        text = text.replace(/\s+$/, "");
-
-        if (navigator.clipboard && navigator.clipboard.writeText) {
-          navigator.clipboard.writeText(text).then(
-            function () {
-              settle(true);
-            },
-            function () {
-              settle(false);
-            }
-          );
-          return;
-        }
-
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(text).then(
+          function () { settle(true); },
+          function () { settle(false); }
+        );
+      } else {
         settle(false);
-      });
+      }
     });
+  });
 
-  /* ---------- live github star count ----------
-     A stable milestone is already in the markup, so this refreshes it to the
-     exact count. If the request fails, GitHub rate limits us, or this file
-     never runs, the truthful milestone stays and nothing moves. Answers are
-     cached locally, so a browsing session costs at most one request per
-     refresh window. */
+  /* ---------- fan curve: draw when it scrolls into view ---------- */
 
-  (function () {
-    var targets = doc.querySelectorAll("[data-star-count]");
-    if (!targets.length || !window.fetch) return;
+  var curve = doc.querySelector("[data-curve]");
 
-    var ENDPOINT = "https://api.github.com/repos/offyotto/Core-Monitor";
-    var KEY = "core-monitor:stars";
-    var MAX_AGE = 10 * 60 * 1000;
-
-    var recall = function () {
-      try {
-        return window.localStorage.getItem(KEY);
-      } catch (error) {
-        // Private windows and blocked storage both throw here.
-        return null;
-      }
-    };
-
-    var remember = function (value) {
-      try {
-        window.localStorage.setItem(KEY, value);
-      } catch (error) {
-        // Caching is an optimisation; carry on without it.
-      }
-    };
-
-    var abbreviate = function (count) {
-      if (count < 1000) return String(count);
-      var thousands = count / 1000;
-      return (
-        (thousands >= 10
-          ? Math.round(thousands)
-          : Math.round(thousands * 10) / 10) + "k"
+  if (curve) {
+    if (reducedMotion.matches || !("IntersectionObserver" in window)) {
+      curve.classList.add("is-drawn");
+    } else {
+      var drawWatch = new IntersectionObserver(
+        function (entries) {
+          entries.forEach(function (entry) {
+            if (entry.isIntersecting) {
+              curve.classList.add("is-drawn");
+              drawWatch.disconnect();
+            }
+          });
+        },
+        { threshold: 0.45 }
       );
-    };
-
-    var paint = function (count) {
-      if (typeof count !== "number" || !isFinite(count) || count < 0) return;
-      Array.prototype.slice.call(targets).forEach(function (target) {
-        target.textContent = abbreviate(count);
-      });
-    };
-
-    var stored = recall();
-
-    if (stored) {
-      var halves = stored.split(":");
-      var checkedAt = parseInt(halves[0], 10);
-      var lastCount = parseInt(halves[1], 10);
-      if (isFinite(checkedAt) && isFinite(lastCount)) {
-        var age = Date.now() - checkedAt;
-        if (age >= 0 && age < MAX_AGE) {
-          paint(lastCount);
-          return;
-        }
-      }
+      drawWatch.observe(curve);
     }
-
-    window
-      .fetch(ENDPOINT, { headers: { Accept: "application/vnd.github+json" } })
-      .then(function (response) {
-        return response.ok ? response.json() : null;
-      })
-      .then(function (data) {
-        if (!data || typeof data.stargazers_count !== "number") return;
-        paint(data.stargazers_count);
-        remember(Date.now() + ":" + data.stargazers_count);
-      })
-      .catch(function () {
-        // Offline, rate limited or blocked. The shipped milestone stands.
-      });
-  })();
-
-  /* ---------- screenshot lightbox ----------
-     The gallery tiles are ordinary links to the full-size image, so with
-     this disabled they still open the screenshot. When <dialog> is
-     available we intercept and show it in place instead. Escape, backdrop
-     clicks and focus restoration all come free from the dialog element. */
-
-  var lightbox = doc.getElementById("lightbox");
-
-  if (lightbox && typeof lightbox.showModal === "function") {
-    var stage = lightbox.querySelector(".lightbox-img");
-    var stageCaption = lightbox.querySelector(".lightbox-caption");
-
-    doc.addEventListener("click", function (event) {
-      var trigger = closest(event.target, "[data-lightbox]");
-      if (!trigger) return;
-
-      // Let people open the raw image in a new tab if they mean to.
-      if (event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
-      if (typeof event.button === "number" && event.button !== 0) return;
-
-      var thumb = trigger.querySelector("img");
-      event.preventDefault();
-
-      stage.setAttribute("src", trigger.getAttribute("href"));
-      stage.setAttribute("alt", thumb ? thumb.getAttribute("alt") || "" : "");
-      if (stageCaption) {
-        stageCaption.textContent = trigger.getAttribute("data-lightbox") || "";
-      }
-
-      lightbox.showModal();
-    });
-
-    lightbox.addEventListener("click", function (event) {
-      if (
-        event.target === lightbox ||
-        closest(event.target, "[data-lightbox-close]")
-      ) {
-        lightbox.close();
-      }
-    });
-
-    lightbox.addEventListener("close", function () {
-      stage.removeAttribute("src");
-    });
   }
+
 })();

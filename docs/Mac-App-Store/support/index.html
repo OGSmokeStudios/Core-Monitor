@@ -3,17 +3,17 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="light dark">
   <title>Support | Core-Monitor Mac App Store Edition</title>
   <meta name="description" content="Support for the Mac App Store edition of Core-Monitor. Email the developer directly or open an issue on GitHub for bugs, questions and feature requests.">
   <meta name="application-name" content="Core-Monitor">
   <meta name="apple-mobile-web-app-title" content="Core-Monitor">
   <meta name="robots" content="index,follow,max-image-preview:large">
-  <meta name="theme-color" content="#07080b" media="(prefers-color-scheme: dark)">
-  <meta name="theme-color" content="#f1f2ef" media="(prefers-color-scheme: light)">
+  <meta name="theme-color" content="#e8eaec" media="(prefers-color-scheme: light)">
+  <meta name="theme-color" content="#16191c" media="(prefers-color-scheme: dark)">
   <link rel="canonical" href="https://offyotto.github.io/Core-Monitor/Mac-App-Store/support/">
   <link rel="icon" href="../../favicon.ico?v=6" sizes="any">
   <link rel="icon" type="image/png" sizes="512x512" href="../../images/site/core-monitor-logo.png?v=6">
-  <link rel="shortcut icon" href="../../images/site/core-monitor-logo.png?v=6">
   <link rel="apple-touch-icon" href="../../images/site/core-monitor-logo.png?v=6">
   <meta property="og:site_name" content="Core-Monitor">
   <meta property="og:type" content="website">
@@ -26,50 +26,41 @@
   <meta name="twitter:title" content="Support | Core-Monitor Mac App Store Edition">
   <meta name="twitter:description" content="Support for Core-Monitor on the Mac App Store.">
   <meta name="twitter:image" content="https://offyotto.github.io/Core-Monitor/images/ui/mac-app-store/app-store-dashboard.png">
-  <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@500;600&family=Space+Grotesk:wght@500;600;700&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="../../styles.css?v=9">
-  <link rel="stylesheet" href="https://unpkg.com/lenis@1.3.23/dist/lenis.css">
+  <link rel="preload" as="font" type="font/woff2" href="../../fonts/bricolage-grotesque-latin.woff2" crossorigin>
+  <link rel="stylesheet" href="../../styles.css?v=20">
 </head>
 <body>
-  <a class="skip-link" href="#main">Skip to content</a>
+  <a class="skiplink" href="#main">Skip to content</a>
 
-  <header class="site-header">
-    <div class="wrap header-row">
-      <a class="brand" href="../">
-        <img class="brand-mark" src="../../images/site/core-monitor-logo.png?v=6" alt="Core-Monitor app icon">
-        <span class="brand-text">Core-Monitor</span>
+  <header class="topbar">
+    <div class="shell topbar-inner">
+      <a class="wordmark" href="../">
+        <img src="../../images/site/core-monitor-logo.png?v=6" alt="" width="27" height="27">
+        Core-Monitor
       </a>
-      <div class="header-actions">
-        <a class="btn btn-ghost btn-sm" href="../privacy/">Privacy</a>
-        <a class="btn btn-ghost btn-sm" href="../">Edition page</a>
-        <a class="icon-link" href="https://github.com/offyotto/Core-Monitor" aria-label="Core-Monitor on GitHub" title="Core-Monitor on GitHub">
-          <picture>
-            <source media="(prefers-color-scheme: light)" srcset="../../images/site/github-mark.png">
-            <img src="../../images/site/github-mark-light.png" alt="" width="24" height="24">
-          </picture>
-        </a>
-        <a class="btn btn-solid btn-sm" href="mailto:coremonitor.app@gmail.com">Email support</a>
-      </div>
+      <nav class="site-menu" aria-label="Pages">
+        <a href="../privacy/">Privacy</a>
+        <a href="../">Edition page</a>
+        <a href="https://github.com/offyotto/Core-Monitor">GitHub</a>
+      </nav>
+      <a class="act act-heat act-sm" href="mailto:coremonitor.app@gmail.com">Email support</a>
     </div>
   </header>
 
   <main id="main">
-    <section class="wrap intro">
-      <p class="eyebrow">Support</p>
+    <section class="shell page-lede">
       <h1>One developer, one inbox</h1>
-      <p class="hero-text">Core-Monitor is built and supported by a single developer, Nazish Faizan. Bug reports, setup questions and feature ideas for the Mac App Store edition all land in the same place.</p>
+      <p class="lede-sub">Core-Monitor is built and supported by a single developer, Nazish Faizan. Bug reports, setup questions and feature ideas for the Mac App Store edition all land in the same place.</p>
       <p class="meta-line">Apple listing: <a href="https://apps.apple.com/us/app/core-monitor/id6762558526?mt=12">apps.apple.com/us/app/core-monitor/id6762558526</a></p>
-      <div class="btn-group">
-        <a class="btn btn-solid" href="mailto:coremonitor.app@gmail.com">Email coremonitor.app@gmail.com</a>
-        <a class="btn btn-outline" href="https://github.com/offyotto/core-monitor-app-store/issues">Open a GitHub issue</a>
+      <div class="action-row">
+        <a class="act act-heat" href="mailto:coremonitor.app@gmail.com">Email coremonitor.app@gmail.com</a>
+        <a class="act act-line" href="https://github.com/offyotto/core-monitor-app-store/issues">Open a GitHub issue</a>
       </div>
     </section>
 
-    <section class="wrap section section-tight">
-      <div class="ledger">
-        <div class="ledger-col" data-reveal>
+    <section class="band">
+      <div class="shell duo">
+        <div class="tally">
           <h3>Good reasons to write in</h3>
           <ul>
             <li>Something in the App Store edition looks wrong or crashes</li>
@@ -79,7 +70,7 @@
             <li>General feedback on the interface</li>
           </ul>
         </div>
-        <div class="ledger-col is-out" data-reveal>
+        <div class="tally is-out">
           <h3>Covered elsewhere</h3>
           <ul>
             <li>Fan control and the privileged helper belong to the <a href="../../">direct download build</a></li>
@@ -90,38 +81,38 @@
       </div>
     </section>
 
-    <section class="wrap section">
-      <div class="cards">
-        <article class="card" data-reveal>
+    <section class="band">
+      <div class="shell trio">
+        <article>
           <h3>Direct line</h3>
           <p><a href="mailto:coremonitor.app@gmail.com">coremonitor.app@gmail.com</a> reaches the developer, not a ticket queue. Include your macOS version and Mac model if you are reporting a bug.</p>
         </article>
-        <article class="card is-cool" data-reveal>
+        <article>
           <h3>Public tracker</h3>
           <p>Prefer working in the open? File it on the <a href="https://github.com/offyotto/core-monitor-app-store/issues">issue tracker</a> so others can find the answer later.</p>
         </article>
-        <article class="card" data-reveal>
+        <article>
           <h3>Ownership</h3>
           <p>Legal owner and support contact: Nazish Faizan. Copyright &copy; 2026 Nazish Faizan.</p>
         </article>
       </div>
     </section>
 
-    <section class="cta">
-      <div class="wrap cta-inner">
+    <section class="coda">
+      <div class="shell">
         <h2>Stuck on something? Say so.</h2>
-        <div class="btn-group">
-          <a class="btn btn-solid" href="mailto:coremonitor.app@gmail.com">Email support</a>
-          <a class="btn btn-outline" href="../">Back to the edition page</a>
+        <div class="action-row">
+          <a class="act act-heat" href="mailto:coremonitor.app@gmail.com">Email support</a>
+          <a class="act act-line" href="../">Back to the edition page</a>
         </div>
       </div>
     </section>
   </main>
 
-  <footer class="site-footer">
-    <div class="wrap footer-row">
-      <p class="footer-brand"><img src="../../images/site/core-monitor-logo.png?v=6" alt="" width="22" height="22">Core-Monitor</p>
-      <nav class="footer-nav" aria-label="Footer">
+  <footer class="basefoot">
+    <div class="shell basefoot-row">
+      <p class="basefoot-brand"><img src="../../images/site/core-monitor-logo.png?v=6" alt="" width="21" height="21">Core-Monitor</p>
+      <nav class="basefoot-nav" aria-label="Footer">
         <a href="../../">Home</a>
         <a href="https://github.com/offyotto/Core-Monitor">GitHub</a>
         <a href="../">Mac App Store</a>
@@ -129,8 +120,5 @@
       </nav>
     </div>
   </footer>
-
-  <script src="https://unpkg.com/lenis@1.3.23/dist/lenis.min.js"></script>
-  <script src="../../script.js?v=6"></script>
 </body>
 </html>
