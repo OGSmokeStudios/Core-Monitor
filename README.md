@@ -54,6 +54,8 @@ core-monitor can take over fan speeds through a small privileged helper, then ha
 
 if the smc fan-count reading is unavailable, fan detection checks all candidate fan slots. failed RPM readings do not trigger low-speed alerts; a real 0 RPM reading can still trigger a stall alert when the mac is hot.
 
+manual targets are supervised by the privileged helper while the app stays connected and sends a heartbeat. a lost connection or expired lease triggers an attempt to return the fans to automatic control. reinstall the bundled helper when updating to this version. see [runtime behavior and validation](docs/development/runtime-safety.md) for compatibility and hardware-testing limits.
+
 <p align="center">
   <img src="./docs/images/ui/cooling-v16.png" alt="core-monitor cooling screen with fan speeds, cooling mode, and custom fan curve" width="860">
 </p>
