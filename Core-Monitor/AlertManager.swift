@@ -304,6 +304,10 @@ final class AlertManager: NSObject, ObservableObject {
         }
     }
 
+    static func notificationIdentifier(for kind: AlertRuleKind) -> String {
+        "coremonitor.alert.\(kind.rawValue)"
+    }
+
     private func deliverDesktopNotification(for event: AlertEvent) {
         guard authorizationStatus == .authorized || authorizationStatus == .provisional else { return }
 
@@ -317,7 +321,7 @@ final class AlertManager: NSObject, ObservableObject {
         ]
 
         let request = UNNotificationRequest(
-            identifier: "coremonitor.alert.\(event.id.uuidString)",
+            identifier: Self.notificationIdentifier(for: event.kind),
             content: content,
             trigger: nil
         )

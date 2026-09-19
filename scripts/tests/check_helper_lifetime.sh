@@ -20,6 +20,7 @@ else
     "${ROOT_DIR}/smc-helper/main.swift" \
     "${ROOT_DIR}/smc-helper/SMCHelperXPC.swift" \
     "${ROOT_DIR}/Shared/SMCFanDetection.swift" \
+    "${ROOT_DIR}/Shared/FanControlLease.swift" \
     -Xlinker -sectcreate -Xlinker __TEXT -Xlinker __info_plist \
     -Xlinker "${ROOT_DIR}/smc-helper/Info.plist" \
     -Xlinker -sectcreate -Xlinker __TEXT -Xlinker __launchd_plist \

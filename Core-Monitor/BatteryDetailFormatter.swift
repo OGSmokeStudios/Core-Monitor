@@ -1,71 +1,76 @@
 import Foundation
 
 enum BatteryDetailFormatter {
-    static func powerStateDescription(for info: BatteryInfo) -> String {
+    static func powerStateDescription(for info: BatteryInfo, locale: Locale = AppLocaleStore.currentLocale) -> String {
         if info.isCharging {
-            return "Charging"
+            return localized("Charging", locale: locale)
         }
         if info.isPluggedIn {
-            return "AC Power"
+            return localized("AC Power", locale: locale)
         }
-        return "Battery Power"
+        return localized("Battery Power", locale: locale)
     }
 
-    static func sourceDescription(for info: BatteryInfo) -> String? {
+    static func sourceDescription(for info: BatteryInfo, locale: Locale = AppLocaleStore.currentLocale) -> String? {
         if let source = info.source?.trimmingCharacters(in: .whitespacesAndNewlines), !source.isEmpty {
             switch source {
             case "AC Power":
-                return "Power Adapter"
+                return localized("Power Adapter", locale: locale)
             case "Battery Power":
-                return "Internal Battery"
+                return localized("Internal Battery", locale: locale)
             default:
                 return source
             }
         }
 
         guard info.hasBattery else { return nil }
-        return info.isPluggedIn ? "Power Adapter" : "Internal Battery"
+        return localized(info.isPluggedIn ? "Power Adapter" : "Internal Battery", locale: locale)
     }
 
-    static func runtimeDescription(for info: BatteryInfo) -> String? {
+    static func runtimeDescription(for info: BatteryInfo, locale: Locale = AppLocaleStore.currentLocale) -> String? {
         guard let minutes = info.timeRemainingMinutes, minutes >= 0 else { return nil }
         if minutes == 0 {
-            return info.isCharging ? "Finishing soon" : "Less than 1m remaining"
+            return localized(info.isCharging ? "Finishing soon" : "Less than 1m remaining", locale: locale)
         }
 
-        let formattedDuration = durationDescription(minutes: minutes)
+        let formattedDuration = durationDescription(minutes: minutes, locale: locale)
         if info.isCharging {
-            return "\(formattedDuration) until full"
+            return String(format: localized("%@ until full", locale: locale), locale: locale, formattedDuration)
         }
-        return "\(formattedDuration) remaining"
+        return String(format: localized("%@ remaining", locale: locale), locale: locale, formattedDuration)
     }
 
-    static func durationDescription(minutes: Int) -> String {
-        let clampedMinutes = max(minutes, 0)
-        if clampedMinutes < 60 {
-            return "\(clampedMinutes)m"
-        }
-
-        let hours = clampedMinutes / 60
-        let remainingMinutes = clampedMinutes % 60
-        if remainingMinutes == 0 {
-            return "\(hours)h"
-        }
-        return "\(hours)h \(remainingMinutes)m"
+    static func durationDescription(minutes: Int, locale: Locale = AppLocaleStore.currentLocale) -> String {
+        let formatter = DateComponentsFormatter()
+        formatter.allowedUnits = [.hour, .minute]
+        formatter.unitsStyle = .abbreviated
+        formatter.zeroFormattingBehavior = .dropLeading
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.locale = locale
+        formatter.calendar = calendar
+        return formatter.string(from: TimeInterval(max(0, minutes)) * 60) ?? "0"
     }
 
-    static func temperatureDescription(_ temperature: Double?) -> String? {
+    static func temperatureDescription(_ temperature: Double?, locale: Locale = AppLocaleStore.currentLocale) -> String? {
         guard let temperature else { return nil }
-        return String(format: "%.1f °C", temperature)
+        return String(format: "%.1f °C", locale: locale, temperature)
     }
 
-    static func voltageDescription(_ voltage: Double?) -> String? {
+    static func voltageDescription(_ voltage: Double?, locale: Locale = AppLocaleStore.currentLocale) -> String? {
         guard let voltage else { return nil }
-        return String(format: "%.2f V", voltage)
+        return String(format: "%.2f V", locale: locale, voltage)
     }
 
-    static func amperageDescription(_ amperage: Double?) -> String? {
+    static func amperageDescription(_ amperage: Double?, locale: Locale = AppLocaleStore.currentLocale) -> String? {
         guard let amperage else { return nil }
-        return String(format: "%.2f A", amperage)
+        return String(format: "%.2f A", locale: locale, amperage)
+    }
+
+    private static func localized(_ key: String, locale: Locale) -> String {
+        let language = Bundle.preferredLocalizations(from: Bundle.main.localizations, forPreferences: [locale.identifier]).first ?? "en"
+        guard let path = Bundle.main.path(forResource: language, ofType: "lproj"), let bundle = Bundle(path: path) else { return key }
+        let existing = bundle.localizedString(forKey: key, value: key, table: nil)
+        if existing != key { return existing }
+        return bundle.localizedString(forKey: key, value: key, table: "BatteryDetails")
     }
 }

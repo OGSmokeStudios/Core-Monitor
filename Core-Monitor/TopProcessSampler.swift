@@ -35,7 +35,7 @@ final class TopProcessSampler {
     private var isRunning = false
     private var previousCPUTimeByPID: [pid_t: UInt64] = [:]
     private var previousSampleDate = Date()
-    private var isSampling = false
+    private var samplingSession = SamplingSession()
 
     init(interval: TimeInterval = 5.0, limit: Int = 4) {
         self.interval = interval
@@ -56,6 +56,7 @@ final class TopProcessSampler {
         timer?.invalidate()
         timer = nil
         isRunning = true
+        samplingSession.start()
 
         sample()
 
@@ -79,6 +80,9 @@ final class TopProcessSampler {
         timer?.invalidate()
         timer = nil
         isRunning = false
+        samplingSession.stop()
+        previousCPUTimeByPID = [:]
+        previousSampleDate = Date()
     }
 
     static func shouldRestartTimer(
@@ -91,8 +95,7 @@ final class TopProcessSampler {
     }
 
     private func sample() {
-        guard !isSampling else { return }
-        isSampling = true
+        guard let ticket = samplingSession.begin() else { return }
 
         let now = Date()
         let elapsed = max(now.timeIntervalSince(previousSampleDate), 1)
@@ -124,10 +127,9 @@ final class TopProcessSampler {
             let nextCPUTimeByPID = Dictionary(sampled.map { ($0.pid, $0.cpuTime) }, uniquingKeysWith: { first, _ in first })
 
             DispatchQueue.main.async { [weak self] in
-                guard let self else { return }
+                guard let self, self.samplingSession.complete(ticket) else { return }
                 self.previousSampleDate = now
                 self.previousCPUTimeByPID = nextCPUTimeByPID
-                self.isSampling = false
                 self.onUpdate?(snapshot)
             }
         }

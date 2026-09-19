@@ -153,7 +153,7 @@ final class DiskProcessSampler: ObservableObject {
     private var timer: Timer?
     private var isRunning = false
     private var previousCountersByPID: [pid_t: DiskProcessCounter] = [:]
-    private var isSampling = false
+    private var samplingSession = SamplingSession()
 
     init(interval: TimeInterval = 5.0, limit: Int = 4) {
         self.interval = interval
@@ -174,6 +174,7 @@ final class DiskProcessSampler: ObservableObject {
         timer?.invalidate()
         timer = nil
         isRunning = true
+        samplingSession.start()
 
         sample()
 
@@ -192,8 +193,8 @@ final class DiskProcessSampler: ObservableObject {
         timer?.invalidate()
         timer = nil
         isRunning = false
+        samplingSession.stop()
         previousCountersByPID = [:]
-        isSampling = false
 
         guard clear else { return }
         processes = []
@@ -210,8 +211,7 @@ final class DiskProcessSampler: ObservableObject {
     }
 
     private func sample() {
-        guard isRunning, !isSampling else { return }
-        isSampling = true
+        guard let ticket = samplingSession.begin() else { return }
 
         let previousCountersByPID = self.previousCountersByPID
         let limit = self.limit
@@ -226,9 +226,7 @@ final class DiskProcessSampler: ObservableObject {
             let nextCountersByPID = Dictionary(counters.map { ($0.pid, $0) }, uniquingKeysWith: { first, _ in first })
 
             DispatchQueue.main.async { [weak self] in
-                guard let self else { return }
-                self.isSampling = false
-                guard self.isRunning else { return }
+                guard let self, self.samplingSession.complete(ticket) else { return }
                 self.previousCountersByPID = nextCountersByPID
                 self.processes = activities
                 self.hasSample = true

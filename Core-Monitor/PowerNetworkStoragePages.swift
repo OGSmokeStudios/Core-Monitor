@@ -5,6 +5,7 @@ import SwiftUI
 
 struct PowerPage: View {
     @ObservedObject var systemMonitor: SystemMonitor
+    @Environment(\.locale) private var locale
     @State private var range: MonitoringTrendRange = .fiveMinutes
 
     var body: some View {
@@ -55,10 +56,10 @@ struct PowerPage: View {
                         .frame(width: 64, height: 64)
 
                         VStack(alignment: .leading, spacing: 4) {
-                            Text(BatteryDetailFormatter.powerStateDescription(for: battery))
+                            Text(BatteryDetailFormatter.powerStateDescription(for: battery, locale: locale))
                                 .font(.body.weight(.medium))
-                            if let runtime = BatteryDetailFormatter.runtimeDescription(for: battery) {
-                                Text(battery.isCharging ? "Full in about \(runtime)" : "About \(runtime) remaining")
+                            if let runtime = BatteryDetailFormatter.runtimeDescription(for: battery, locale: locale) {
+                                Text(runtime)
                                     .font(.callout)
                                     .foregroundStyle(.secondary)
                             }
@@ -72,15 +73,15 @@ struct PowerPage: View {
                     ReadingRow("Cycle count", value: battery.cycleCount.map(String.init) ?? "Unavailable")
                     ReadingRow(
                         "Temperature",
-                        value: BatteryDetailFormatter.temperatureDescription(battery.temperatureC) ?? "Unavailable"
+                        value: BatteryDetailFormatter.temperatureDescription(battery.temperatureC, locale: locale) ?? "Unavailable"
                     )
                     ReadingRow(
                         "Voltage",
-                        value: BatteryDetailFormatter.voltageDescription(battery.voltageV) ?? "Unavailable"
+                        value: BatteryDetailFormatter.voltageDescription(battery.voltageV, locale: locale) ?? "Unavailable"
                     )
                     ReadingRow(
                         "Current",
-                        value: BatteryDetailFormatter.amperageDescription(battery.amperageA) ?? "Unavailable"
+                        value: BatteryDetailFormatter.amperageDescription(battery.amperageA, locale: locale) ?? "Unavailable"
                     )
                 }
             } else {

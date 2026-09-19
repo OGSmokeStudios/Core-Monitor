@@ -396,6 +396,36 @@ final class FanController: ObservableObject {
 
     private weak var systemMonitor: SystemMonitor?
     private var controlTimer: Timer?
+    private var leaseTimer: Timer?
+    private var leaseTask: Task<Void, Never>?
+    private var controlTask: Task<Void, Never>?
+    private var controlOperations: [@MainActor () async -> Void] = []
+    private var updateQueued = false
+    private var isTerminating = false
+
+    private func enqueueControl(_ operation: @escaping @MainActor () async -> Void) {
+        guard !isTerminating else { return }
+        controlOperations.append(operation)
+        guard controlTask == nil else { return }
+        controlTask = Task { @MainActor [weak self] in
+            guard let self else { return }
+            while !isTerminating, !Task.isCancelled, !controlOperations.isEmpty {
+                let operation = controlOperations.removeFirst()
+                await operation()
+            }
+            controlTask = nil
+        }
+    }
+
+    private func queueManagedUpdate() {
+        guard !updateQueued else { return }
+        updateQueued = true
+        enqueueControl { [weak self] in
+            guard let self else { return }
+            updateQueued = false
+            await updateManagedControl()
+        }
+    }
     private var lastAppliedSpeed: Int = 0
     private let helperManager = SMCHelperManager.shared
     private var workspaceObservers: [NSObjectProtocol] = []
@@ -413,6 +443,9 @@ final class FanController: ObservableObject {
 
     deinit {
         controlTimer?.invalidate()
+        leaseTimer?.invalidate()
+        leaseTask?.cancel()
+        controlTask?.cancel()
         controlTimer = nil
         for observer in workspaceObservers {
             NSWorkspace.shared.notificationCenter.removeObserver(observer)
@@ -434,27 +467,28 @@ final class FanController: ObservableObject {
 
     // MARK: - Public API
 
-    /// Best-effort shutdown cleanup so managed fan targets do not outlive the app process.
+    /// Disconnecting the persistent session makes the helper restore owned fans.
+    /// Its watchdog also restores them after an app crash or stalled heartbeat.
     func restoreSystemAutomaticOnTermination() {
+        isTerminating = true
         stopControlLoop()
-
-        guard mode != .automatic else { return }
-        guard helperManager.isInstalled else { return }
-
-        let fanCount = resolvedFanCount()
-        guard fanCount > 0 else { return }
-
-        for fanID in 0..<fanCount {
-            _ = helperManager.executeIfInstalled(arguments: ["auto", "\(fanID)"], timeout: 1.0)
-        }
+        controlTask?.cancel()
+        controlOperations.removeAll()
+        helperManager.endControlSession()
     }
 
     func setMode(_ mode: FanControlMode) {
+        enqueueControl { [weak self] in await self?.setModeAndApply(mode) }
+    }
+
+    private func setModeAndApply(_ mode: FanControlMode) async {
+        guard !isTerminating, !Task.isCancelled else { return }
         let resolvedMode = mode.canonicalMode
 
         if resolvedMode.requiresPrivilegedHelper {
-            guard canActivatePrivilegedMode() else { return }
+            guard await canActivatePrivilegedMode() else { return }
         }
+        guard !isTerminating, !Task.isCancelled else { return }
         self.mode = resolvedMode
         // Only clear the last-applied speed when entering a managed mode. For
         // system-owned modes we must preserve it so applyCurrentMode can tell a
@@ -466,14 +500,14 @@ final class FanController: ObservableObject {
             lastAppliedSpeed = 0
         }
         saveSettings()
-        applyCurrentMode(force: true)
+        await applyCurrentMode(force: true)
     }
 
     func setManualSpeed(_ speed: Int) {
         manualSpeed = max(minSpeed, min(maxSpeed, speed))
         saveSettings()
         guard mode == .manual else { return }
-        applyFanSpeed(manualSpeed)
+        queueManagedUpdate()
     }
 
     func setAutoAggressiveness(_ value: Double) {
@@ -481,7 +515,7 @@ final class FanController: ObservableObject {
         saveSettings()
         if mode == .smart {
             lastAppliedSpeed = 0
-            updateManagedControl()
+            queueManagedUpdate()
         }
     }
 
@@ -492,7 +526,7 @@ final class FanController: ObservableObject {
         // in a system-owned mode would just churn the status line.
         if mode == .smart {
             lastAppliedSpeed = 0
-            updateManagedControl()
+            queueManagedUpdate()
         }
     }
 
@@ -568,8 +602,7 @@ final class FanController: ObservableObject {
             self.customPreset = preset
             if mode == .custom {
                 lastAppliedSpeed = 0
-                applyCurrentMode(force: true)
-                statusMessage = "Custom preset \"\(preset.name)\" applied."
+                enqueueControl { [weak self] in await self?.applyCurrentMode(force: true) }
             }
             return .success(customPresetStatus)
         } catch {
@@ -641,15 +674,25 @@ final class FanController: ObservableObject {
     }
 
     func resetToSystemAutomatic() {
+        enqueueControl { [weak self] in
+            guard let self else { return }
+            mode = .automatic
+            saveSettings()
+            stopControlLoop()
+            await resetAutomatic()
+        }
+    }
+
+    private func resetAutomatic() async {
         guard ensureHelperInstalledIfNeeded() else { return }
-        let fanCount = resolvedFanCount()
+        let fanCount = await resolvedFanCount()
         guard fanCount > 0 else {
             statusMessage = helperUnavailableMessage()
             return
         }
         var allSuccess = true
         for fanID in 0..<fanCount {
-            if !runSmcHelper(arguments: ["auto", "\(fanID)"]) {
+            if await runSmcHelper(arguments: ["auto", "\(fanID)"]) == false {
                 allSuccess = false
             }
         }
@@ -659,12 +702,12 @@ final class FanController: ObservableObject {
     /// Hands every fan back to the firmware curve without ever prompting for a
     /// helper install. Choosing a system-owned mode must never escalate
     /// privileges, so with no helper present we only report the passive state.
-    private func requestSystemAutomaticHandoff() {
+    private func requestSystemAutomaticHandoff() async {
         guard helperManager.isInstalled else {
             statusMessage = passiveStatusMessage(for: mode)
             return
         }
-        resetToSystemAutomatic()
+        await resetAutomatic()
     }
 
     func calibrateFanControl() {
@@ -683,7 +726,7 @@ final class FanController: ObservableObject {
             var responsiveKeys: [String] = []
 
             for (index, key) in keys.enumerated() {
-                if helperManager.readValue(key: key) != nil {
+                if await helperManager.readValue(key: key) != nil {
                     responsiveKeys.append(key)
                 }
 
@@ -705,14 +748,20 @@ final class FanController: ObservableObject {
 
     // MARK: - Control Loop
 
-    private func startControlLoop() {
+    private func startControlLoop() async {
         stopControlLoop()
-        updateManagedControl()
+        await updateManagedControl()
+        guard !isTerminating, !Task.isCancelled else { return }
+
+        leaseTimer = Timer.scheduledTimer(withTimeInterval: 2, repeats: true) { [weak self] _ in
+            Task { @MainActor [weak self] in self?.renewLeaseIfNeeded() }
+        }
+        if let leaseTimer { RunLoop.current.add(leaseTimer, forMode: .common) }
 
         let interval = controlLoopInterval()
         controlTimer = Timer.scheduledTimer(withTimeInterval: interval, repeats: true) { [weak self] _ in
             Task { @MainActor [weak self] in
-                self?.updateManagedControl()
+                if self?.controlTask == nil { self?.queueManagedUpdate() }
             }
         }
 
@@ -725,6 +774,21 @@ final class FanController: ObservableObject {
     private func stopControlLoop() {
         controlTimer?.invalidate()
         controlTimer = nil
+        leaseTimer?.invalidate()
+        leaseTimer = nil
+        leaseTask?.cancel()
+        leaseTask = nil
+    }
+
+    private func renewLeaseIfNeeded() {
+        guard !isTerminating, controlTimer != nil, leaseTask == nil else { return }
+        leaseTask = Task { @MainActor [weak self] in
+            guard let self else { return }
+            let renewed = await helperManager.renewControlLease()
+            guard !Task.isCancelled else { return }
+            if !renewed { lastAppliedSpeed = 0 }
+            leaseTask = nil
+        }
     }
 
     private func controlLoopInterval() -> TimeInterval {
@@ -732,7 +796,7 @@ final class FanController: ObservableObject {
         return customPreset?.resolvedUpdateInterval ?? 2.0
     }
 
-    private func applyCurrentMode(force: Bool = false) {
+    private func applyCurrentMode(force: Bool = false) async {
         if force { stopControlLoop() }
 
         switch mode {
@@ -742,60 +806,58 @@ final class FanController: ObservableObject {
             // process: after a relaunch, a crash, or an earlier handoff it
             // reads 0 or -1 while the fans may still be pinned from before.
             if force || Self.shouldRequestSystemAutomaticHandoff(lastAppliedSpeed: lastAppliedSpeed) {
-                requestSystemAutomaticHandoff()
+                await requestSystemAutomaticHandoff()
             } else {
                 statusMessage = passiveStatusMessage(for: mode)
             }
             lastAppliedSpeed = -1
         case .manual:
-            applyFanSpeed(manualSpeed)
-            lastAppliedSpeed = manualSpeed
-            statusMessage = "Manual: \(manualSpeed) RPM"
-            startControlLoop()
+            await startControlLoop()
         case .smart, .balanced, .performance, .max, .custom:
-            startControlLoop()
+            await startControlLoop()
         }
     }
 
-    private func updateManagedControl() {
-        guard systemMonitor != nil else { return }
+    private func updateManagedControl() async {
+        guard !isTerminating, !Task.isCancelled, systemMonitor != nil else { return }
 
         switch mode {
         case .manual:
             if abs(manualSpeed - lastAppliedSpeed) >= 50 || lastAppliedSpeed == 0 {
-                applyFanSpeed(manualSpeed)
-                lastAppliedSpeed = manualSpeed
+                let target = manualSpeed
+                guard await applyFanSpeed(target) else { return }
+                lastAppliedSpeed = target
             }
             statusMessage = "Manual: \(manualSpeed) RPM"
 
         case .automatic, .silent:
             if Self.shouldRequestSystemAutomaticHandoff(lastAppliedSpeed: lastAppliedSpeed) {
-                requestSystemAutomaticHandoff()
+                await requestSystemAutomaticHandoff()
             } else {
                 statusMessage = passiveStatusMessage(for: mode)
             }
             lastAppliedSpeed = -1
 
         case .balanced:
-            applyFixedPercentProfile(0.60, label: "Balanced")
+            await applyFixedPercentProfile(0.60, label: "Balanced")
 
         case .performance:
-            applyFixedPercentProfile(0.85, label: "Performance")
+            await applyFixedPercentProfile(0.85, label: "Performance")
 
         case .max:
-            applyFixedPercentProfile(1.0, label: "Max")
+            await applyFixedPercentProfile(1.0, label: "Max")
 
         case .smart:
-            updateSmartProfile()
+            await updateSmartProfile()
 
         case .custom:
-            updateCustomProfile()
+            await updateCustomProfile()
         }
     }
 
     // MARK: - Smart Profile (temperature + power aware)
 
-    private func updateSmartProfile() {
+    private func updateSmartProfile() async {
         guard let monitor = systemMonitor else { return }
 
         let cpuTemp = monitor.cpuSafetyTemperature ?? 0
@@ -826,7 +888,7 @@ final class FanController: ObservableObject {
 
         let finalSpeed = Int(max(Double(minSpeed), min(Double(autoMaxSpeed), target)))
         if abs(finalSpeed - lastAppliedSpeed) >= 50 || lastAppliedSpeed == 0 {
-            applyFanSpeed(finalSpeed)
+            guard await applyFanSpeed(finalSpeed) else { return }
             lastAppliedSpeed = finalSpeed
             let tempStr = gpuTemp > cpuTemp
                 ? String(format: "GPU %.0f°C", gpuTemp)
@@ -837,7 +899,7 @@ final class FanController: ObservableObject {
 
     // MARK: - Custom Profile
 
-    private func updateCustomProfile() {
+    private func updateCustomProfile() async {
         guard let monitor = systemMonitor else { return }
         guard let preset = customPreset else {
             let message = customPresetLastError ?? "No custom preset has been saved yet."
@@ -872,7 +934,7 @@ final class FanController: ObservableObject {
         let effectiveTemperature = min(baseTemperature + powerBoost, 120)
         let percent = max(0, min(100, preset.interpolatedSpeedPercent(for: effectiveTemperature)))
 
-        let fanCount = max(resolvedFanCount(), 1)
+        let fanCount = max(await resolvedFanCount(), 1)
         let fallbackMin = monitor.fanMinSpeeds.first ?? minSpeed
         let fallbackMax = monitor.fanMaxSpeeds.first ?? maxSpeed
         let presetMin = max(preset.minimumRPM ?? fallbackMin, minSpeed)
@@ -900,7 +962,7 @@ final class FanController: ObservableObject {
         }
 
         if abs(smoothedTarget - lastAppliedSpeed) >= 50 || lastAppliedSpeed == 0 {
-            _ = applyPerFanSpeeds(requestedSpeeds, successMessage: "Custom: \(preset.name)")
+            guard await applyPerFanSpeeds(requestedSpeeds, successMessage: "Custom: \(preset.name)") else { return }
             lastAppliedSpeed = smoothedTarget
         }
 
@@ -922,9 +984,9 @@ final class FanController: ObservableObject {
 
     // MARK: - Fixed Percent Profile
 
-    private func applyFixedPercentProfile(_ percent: Double, label: String) {
+    private func applyFixedPercentProfile(_ percent: Double, label: String) async {
         guard let monitor = systemMonitor else { return }
-        let fanCount = resolvedFanCount()
+        let fanCount = await resolvedFanCount()
         guard fanCount > 0 else {
             statusMessage = helperUnavailableMessage()
             return
@@ -933,7 +995,7 @@ final class FanController: ObservableObject {
         let firstMax = monitor.fanMaxSpeeds.first ?? maxSpeed
         let target = Int((Double(firstMax) * percent).rounded())
         if abs(target - lastAppliedSpeed) >= 50 || lastAppliedSpeed == 0 {
-            applyFanSpeed(target)
+            guard await applyFanSpeed(target) else { return }
             lastAppliedSpeed = target
         }
         statusMessage = "\(label): \(target) RPM"
@@ -941,16 +1003,17 @@ final class FanController: ObservableObject {
 
     // MARK: - Speed Application
 
-    private func applyFanSpeed(_ speed: Int) {
-        let fanCount = max(resolvedFanCount(), 1)
+    @discardableResult
+    private func applyFanSpeed(_ speed: Int) async -> Bool {
+        let fanCount = max(await resolvedFanCount(), 1)
         let speeds = Array(repeating: speed, count: fanCount)
-        _ = applyPerFanSpeeds(speeds, successMessage: "Applied \(speed) RPM")
+        return await applyPerFanSpeeds(speeds, successMessage: "Applied \(speed) RPM")
     }
 
     @discardableResult
-    private func applyPerFanSpeeds(_ requestedSpeeds: [Int], successMessage: String?) -> Bool {
-        guard let monitor = systemMonitor else { return false }
-        let fanCount = resolvedFanCount()
+    private func applyPerFanSpeeds(_ requestedSpeeds: [Int], successMessage: String?) async -> Bool {
+        guard !isTerminating, !Task.isCancelled, let monitor = systemMonitor else { return false }
+        let fanCount = await resolvedFanCount()
         guard fanCount > 0 else {
             statusMessage = helperUnavailableMessage()
             return false
@@ -963,7 +1026,7 @@ final class FanController: ObservableObject {
             let perFanMax = fanID < monitor.fanMaxSpeeds.count ? monitor.fanMaxSpeeds[fanID] : maxSpeed
             let requested = fanID < requestedSpeeds.count ? requestedSpeeds[fanID] : (requestedSpeeds.last ?? requestedSpeeds.first ?? minSpeed)
             let clamped = max(perFanMin, min(perFanMax, requested))
-            if !runSmcHelper(arguments: ["set", "\(fanID)", "\(clamped)"]) {
+            if await runSmcHelper(arguments: ["set", "\(fanID)", "\(clamped)"]) == false {
                 allSuccess = false
             }
         }
@@ -977,9 +1040,9 @@ final class FanController: ObservableObject {
         return allSuccess
     }
 
-    private func canActivatePrivilegedMode() -> Bool {
+    private func canActivatePrivilegedMode() async -> Bool {
         guard ensureHelperInstalledIfNeeded() else { return false }
-        guard resolvedFanCount() > 0 else {
+        guard await resolvedFanCount() > 0 else {
             statusMessage = helperUnavailableMessage()
             return false
         }
@@ -988,8 +1051,8 @@ final class FanController: ObservableObject {
 
     // MARK: - Helper Execution
 
-    private func runSmcHelper(arguments: [String]) -> Bool {
-        let ok = helperManager.execute(arguments: arguments)
+    private func runSmcHelper(arguments: [String]) async -> Bool {
+        let ok = await helperManager.execute(arguments: arguments)
         if !ok, let message = helperManager.statusMessage {
             statusMessage = message
         }
@@ -1004,18 +1067,24 @@ final class FanController: ObservableObject {
         return ok
     }
 
-    private func resolvedFanCount() -> Int {
+    private func resolvedFanCount() async -> Int {
         if let monitor = systemMonitor, monitor.numberOfFans > 0 {
-            return monitor.numberOfFans
+            return min(monitor.numberOfFans, SMCFanDetection.maximumFanCount)
         }
-
-        if let directCount = helperManager.readValue(key: "FNum").map(Int.init), directCount > 0 {
-            return directCount
+        if let count = SMCFanDetection.validatedCount(await helperManager.readValue(key: "FNum")) {
+            return count
         }
-
-        return SMCFanDetection.fallbackCount { key in
-            helperManager.readValue(key: key) != nil
+        var count = 0
+        for id in 0..<SMCFanDetection.maximumFanCount {
+            for suffix in ["Ac", "Mn", "Mx"] {
+                guard !isTerminating, !Task.isCancelled else { return 0 }
+                if await helperManager.readValue(key: "F\(id)\(suffix)") != nil {
+                    count = id + 1
+                    break
+                }
+            }
         }
+        return count
     }
 
     private func helperUnavailableMessage() -> String {
@@ -1077,7 +1146,7 @@ final class FanController: ObservableObject {
             guard let self else { return }
             DispatchQueue.main.asyncAfter(deadline: .now() + 2.0) {
                 self.lastAppliedSpeed = 0
-                self.applyCurrentMode(force: true)
+                self.enqueueControl { [weak self] in await self?.applyCurrentMode(force: true) }
                 if self.mode != .automatic {
                     self.statusMessage = "Re-applied \(self.mode.title.lowercased()) after wake"
                 }

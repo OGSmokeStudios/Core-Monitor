@@ -7,6 +7,9 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		A19600032026091900000002 /* BatteryDetailFormatterTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A19600032026091900000001 /* BatteryDetailFormatterTests.swift */; };
+		A19600022026091900000002 /* HelperXPCClientTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A19600022026091900000001 /* HelperXPCClientTests.swift */; };
+		A19600012026091900000002 /* RuntimeSafetyTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A19600012026091900000001 /* RuntimeSafetyTests.swift */; };
 		A19400012026091900000002 /* FanReadingTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A19400012026091900000001 /* FanReadingTests.swift */; };
 		A19400022026091900000002 /* DiskStatsRefreshPolicyTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A19400022026091900000001 /* DiskStatsRefreshPolicyTests.swift */; };
 		A19400032026091900000002 /* SettingsWindowTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A19400032026091900000001 /* SettingsWindowTests.swift */; };
@@ -51,6 +54,9 @@
 /* End PBXCopyFilesBuildPhase section */
 
 /* Begin PBXFileReference section */
+		A19600032026091900000001 /* BatteryDetailFormatterTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BatteryDetailFormatterTests.swift; sourceTree = "<group>"; };
+		A19600022026091900000001 /* HelperXPCClientTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HelperXPCClientTests.swift; sourceTree = "<group>"; };
+		A19600012026091900000001 /* RuntimeSafetyTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RuntimeSafetyTests.swift; sourceTree = "<group>"; };
 		A19400012026091900000001 /* FanReadingTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FanReadingTests.swift; sourceTree = "<group>"; };
 		A19400022026091900000001 /* DiskStatsRefreshPolicyTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DiskStatsRefreshPolicyTests.swift; sourceTree = "<group>"; };
 		A19400032026091900000001 /* SettingsWindowTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsWindowTests.swift; sourceTree = "<group>"; };
@@ -115,6 +121,9 @@
 		1A2F97F19E4BA4C0B1070411 /* Core-MonitorTests */ = {
 			isa = PBXGroup;
 			children = (
+				A19600032026091900000001 /* BatteryDetailFormatterTests.swift */,
+				A19600022026091900000001 /* HelperXPCClientTests.swift */,
+				A19600012026091900000001 /* RuntimeSafetyTests.swift */,
 				A19400012026091900000001 /* FanReadingTests.swift */,
 				A19400022026091900000001 /* DiskStatsRefreshPolicyTests.swift */,
 				A19400032026091900000001 /* SettingsWindowTests.swift */,
@@ -331,6 +340,9 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				A19600032026091900000002 /* BatteryDetailFormatterTests.swift in Sources */,
+				A19600022026091900000002 /* HelperXPCClientTests.swift in Sources */,
+				A19600012026091900000002 /* RuntimeSafetyTests.swift in Sources */,
 				A19400012026091900000002 /* FanReadingTests.swift in Sources */,
 				A19400022026091900000002 /* DiskStatsRefreshPolicyTests.swift in Sources */,
 				A19400032026091900000002 /* SettingsWindowTests.swift in Sources */,

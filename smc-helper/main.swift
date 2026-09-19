@@ -120,7 +120,7 @@ private final class SMCController {
         try writeValue(key: modeKey, value: 0)
         try? writeValue(key: String(format: "F%dTg", fanID), value: 0)
         if hasForceTest(), otherFansStillManual == 0, isForceTestEnabled() {
-            try? writeValue(key: "Ftst", value: 0)
+            try writeValue(key: "Ftst", value: 0)
         }
     }
 
@@ -279,9 +279,8 @@ private final class SMCController {
     }
 
     private func resolvedFanCount() -> Int {
-        if let directCount = try? readValue("FNum"),
-           Int(directCount.rounded()) > 0 {
-            return Int(directCount.rounded())
+        if let directCount = SMCFanDetection.validatedCount(try? readValue("FNum")) {
+            return directCount
         }
 
         return SMCFanDetection.fallbackCount(keyExists: keyExists)
@@ -513,14 +512,14 @@ private func printUsageAndExit() -> Never {
 
 private func validatedFanID(_ rawValue: String) throws -> Int {
     guard let fanID = Int(rawValue) else {
-        throw HelperError("Fan ID must be between 0 and 11")
+        throw HelperError("Fan ID must be between 0 and 9")
     }
     return try validatedFanID(fanID)
 }
 
 private func validatedFanID(_ fanID: Int) throws -> Int {
-    guard (0..<12).contains(fanID) else {
-        throw HelperError("Fan ID must be between 0 and 11")
+    guard SMCFanDetection.supports(fanID: fanID) else {
+        throw HelperError("Fan ID must be between 0 and 9")
     }
     return fanID
 }
@@ -593,82 +592,150 @@ private final class HelperClientValidator {
 
 private let helperMachServiceName = Bundle.main.bundleIdentifier ?? "ventaphobia.smc-helper"
 
-private final class SMCHelperXPCService: NSObject, NSXPCListenerDelegate, SMCHelperXPCProtocol {
+private final class SMCHelperXPCService: NSObject, NSXPCListenerDelegate {
     private let controller = SMCController()
     private let clientValidator = HelperClientValidator()
     private let controllerQueue = DispatchQueue(label: "ventaphobia.smc-helper.smc-controller", qos: .userInitiated)
+    private var clients = Set<UUID>()
+    private var leases = FanControlLease()
+    private var watchdog: DispatchSourceTimer?
 
     override init() {
         super.init()
-        try? controller.open()
+        let timer = DispatchSource.makeTimerSource(queue: controllerQueue)
+        timer.schedule(deadline: .now() + 1, repeating: 1)
+        timer.setEventHandler { [weak self] in self?.restoreExpiredLeases() }
+        watchdog = timer
+        timer.resume()
     }
 
-    func listener(_ listener: NSXPCListener, shouldAcceptNewConnection newConnection: NSXPCConnection) -> Bool {
-        guard let clientValidator, clientValidator.authorize(newConnection) else {
-            NSLog("smc-helper rejected unauthorized XPC client from pid %d", newConnection.processIdentifier)
+    deinit { watchdog?.cancel() }
+
+    func listener(_ listener: NSXPCListener, shouldAcceptNewConnection connection: NSXPCConnection) -> Bool {
+        guard let clientValidator, clientValidator.authorize(connection) else {
+            NSLog("smc-helper rejected unauthorized XPC client from pid %d", connection.processIdentifier)
             return false
         }
-
-        newConnection.exportedInterface = NSXPCInterface(with: SMCHelperXPCProtocol.self)
-        newConnection.exportedObject = self
-        newConnection.resume()
+        let owner = UUID()
+        controllerQueue.async { self.clients.insert(owner) }
+        connection.exportedInterface = NSXPCInterface(with: SMCHelperXPCProtocol.self)
+        connection.exportedObject = SMCHelperClientSession(service: self, owner: owner)
+        connection.invalidationHandler = { [weak self] in self?.disconnect(owner) }
+        connection.interruptionHandler = { [weak self] in self?.disconnect(owner) }
+        connection.resume()
         return true
     }
 
+    private func disconnect(_ owner: UUID) {
+        controllerQueue.async {
+            self.clients.remove(owner)
+            self.leases.expire(owner: owner)
+            self.restoreExpiredLeases()
+        }
+    }
+
+    private func restoreExpiredLeases() {
+        let controller = controller
+        let failed = leases.restoreExpired(now: ProcessInfo.processInfo.systemUptime) { fanID in
+            try controller.open()
+            try controller.setFanAuto(fanID)
+        }
+        if !failed.isEmpty { NSLog("smc-helper will retry automatic restore for fans %@", failed.description) }
+    }
+
+    func renew(owner: UUID, reply: @escaping (NSNumber, NSString?) -> Void) {
+        controllerQueue.async {
+            guard self.clients.contains(owner) else { reply(NSNumber(value: false), "Client session ended"); return }
+            self.restoreExpiredLeases()
+            reply(NSNumber(value: self.leases.renewed(owner: owner, now: ProcessInfo.processInfo.systemUptime)), nil)
+        }
+    }
+
+    func setManual(owner: UUID, fanID: Int, rpm: Int, reply: @escaping (NSString?) -> Void) {
+        controllerQueue.async {
+            do {
+                guard self.clients.contains(owner) else { throw HelperError("Client session ended") }
+                let fanID = try validatedFanID(fanID)
+                let rpm = try validatedRPM(rpm)
+                self.restoreExpiredLeases()
+                guard self.leases.acquire(fanID, owner: owner, now: ProcessInfo.processInfo.systemUptime) else {
+                    throw HelperError("Fan is controlled by another client session")
+                }
+                do {
+                    try self.controller.open()
+                    try self.controller.setFanManual(fanID, rpm: rpm)
+                } catch {
+                    self.leases.expire(owner: owner)
+                    self.restoreExpiredLeases()
+                    throw error
+                }
+                reply(nil)
+            } catch { reply(error.localizedDescription as NSString) }
+        }
+    }
+
+    func setAuto(owner: UUID, fanID: Int, reply: @escaping (NSString?) -> Void) {
+        controllerQueue.async {
+            do {
+                guard self.clients.contains(owner) else { throw HelperError("Client session ended") }
+                let fanID = try validatedFanID(fanID)
+                guard self.leases.canControl(fanID, owner: owner) else {
+                    throw HelperError("Fan is controlled by another client session")
+                }
+                try self.controller.open()
+                try self.controller.setFanAuto(fanID)
+                self.leases.release(fanID)
+                reply(nil)
+            } catch { reply(error.localizedDescription as NSString) }
+        }
+    }
+
+    func read(owner: UUID, key: String, reply: @escaping (NSNumber?, NSString?) -> Void) {
+        controllerQueue.async {
+            do {
+                guard self.clients.contains(owner) else { throw HelperError("Client session ended") }
+                let key = try validatedSMCKey(key)
+                try self.controller.open()
+                reply(NSNumber(value: try self.controller.readValue(key)), nil)
+            } catch { reply(nil, error.localizedDescription as NSString) }
+        }
+    }
+
+    func metadata(owner: UUID, reply: @escaping (NSString?, NSNumber?, NSString?) -> Void) {
+        controllerQueue.async {
+            do {
+                guard self.clients.contains(owner) else { throw HelperError("Client session ended") }
+                try self.controller.open()
+                let metadata = self.controller.controlMetadata()
+                reply(metadata.modeKeyTemplate as NSString, NSNumber(value: metadata.hasForceTestKey), nil)
+            } catch { reply(nil, nil, error.localizedDescription as NSString) }
+        }
+    }
+}
+
+private final class SMCHelperClientSession: NSObject, SMCHelperXPCProtocol {
+    private let service: SMCHelperXPCService
+    private let owner: UUID
+
+    init(service: SMCHelperXPCService, owner: UUID) {
+        self.service = service
+        self.owner = owner
+        super.init()
+    }
+
+    func readSafetyVersion(withReply reply: @escaping (NSNumber) -> Void) { reply(1) }
+    func renewControlLease(withReply reply: @escaping (NSNumber, NSString?) -> Void) { service.renew(owner: owner, reply: reply) }
     func setFanManual(_ fanID: Int, rpm: Int, withReply reply: @escaping (NSString?) -> Void) {
-        controllerQueue.async { [controller] in
-            do {
-                let validatedFanID = try validatedFanID(fanID)
-                let validatedRPM = try validatedRPM(rpm)
-                try controller.open()
-                try controller.setFanManual(validatedFanID, rpm: validatedRPM)
-                reply(nil)
-            } catch {
-                reply(error.localizedDescription as NSString)
-            }
-        }
+        service.setManual(owner: owner, fanID: fanID, rpm: rpm, reply: reply)
     }
-
     func setFanAuto(_ fanID: Int, withReply reply: @escaping (NSString?) -> Void) {
-        controllerQueue.async { [controller] in
-            do {
-                let validatedFanID = try validatedFanID(fanID)
-                try controller.open()
-                try controller.setFanAuto(validatedFanID)
-                reply(nil)
-            } catch {
-                reply(error.localizedDescription as NSString)
-            }
-        }
+        service.setAuto(owner: owner, fanID: fanID, reply: reply)
     }
-
     func readValue(_ key: String, withReply reply: @escaping (NSNumber?, NSString?) -> Void) {
-        controllerQueue.async { [controller] in
-            do {
-                let validatedKey = try validatedSMCKey(key)
-                try controller.open()
-                let value = try controller.readValue(validatedKey)
-                reply(NSNumber(value: value), nil)
-            } catch {
-                reply(nil, error.localizedDescription as NSString)
-            }
-        }
+        service.read(owner: owner, key: key, reply: reply)
     }
-
     func readControlMetadata(withReply reply: @escaping (NSString?, NSNumber?, NSString?) -> Void) {
-        controllerQueue.async { [controller] in
-            do {
-                try controller.open()
-                let metadata = controller.controlMetadata()
-                reply(
-                    metadata.modeKeyTemplate as NSString,
-                    NSNumber(value: metadata.hasForceTestKey),
-                    nil
-                )
-            } catch {
-                reply(nil, nil, error.localizedDescription as NSString)
-            }
-        }
+        service.metadata(owner: owner, reply: reply)
     }
 }
 
@@ -683,11 +750,7 @@ private func runCommandLineMode(arguments: [String]) -> Never {
 
         switch command {
         case "set":
-            guard arguments.count == 4 else { printUsageAndExit() }
-            let fanID = try validatedFanID(arguments[2])
-            let rpm = try validatedRPM(arguments[3])
-            try controller.setFanManual(fanID, rpm: rpm)
-            print("ok")
+            throw HelperError("Manual control requires the app's live XPC session so crash recovery can supervise it.")
 
         case "auto":
             guard arguments.count == 3 else { printUsageAndExit() }
