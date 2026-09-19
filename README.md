@@ -41,6 +41,8 @@ it runs locally, needs no account, and is built native for apple silicon rather 
 
 cpu, gpu, memory, battery, thermals, power draw, fan speeds, network, and disk. readings come from the apple smc and system apis, so the numbers match what the hardware actually reports.
 
+if a disk capacity refresh fails, core-monitor keeps the last successful reading and retries on the next sample.
+
 <p align="center">
   <img src="./docs/images/ui/memory-v16.png" alt="core-monitor memory screen with usage history and memory breakdown" width="860">
   <img src="./docs/images/ui/storage-v16.png" alt="core-monitor storage screen with used, purgeable, free, and total capacity" width="860">
@@ -49,6 +51,8 @@ cpu, gpu, memory, battery, thermals, power draw, fan speeds, network, and disk. 
 ## fan control
 
 core-monitor can take over fan speeds through a small privileged helper, then hand control back to macos when you turn it off. you can set fixed speeds or build custom curves. the controls are explicit on purpose, since this touches cooling on a machine you care about.
+
+if the smc fan-count reading is unavailable, fan detection checks all candidate fan slots. failed RPM readings do not trigger low-speed alerts; a real 0 RPM reading can still trigger a stall alert when the mac is hot.
 
 <p align="center">
   <img src="./docs/images/ui/cooling-v16.png" alt="core-monitor cooling screen with fan speeds, cooling mode, and custom fan curve" width="860">
@@ -59,6 +63,8 @@ core-monitor can take over fan speeds through a small privileged helper, then ha
 - pick which readings sit in the menu bar and read them at a glance
 - open a compact popover for a fuller summary without leaving what you are doing
 - put live widgets on the touch bar if your mac has one
+
+the fan menu bar value shows `0` when the highest available reading is 0 RPM, and `—` when no fan reading is available. settings shortcuts select their requested tab even when the settings window is already open.
 
 <p align="center">
   <img src="./docs/images/ui/menu-network-v16.png" alt="core-monitor network menu bar panel" width="400">

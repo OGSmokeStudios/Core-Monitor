@@ -1,4 +1,5 @@
 import AppKit
+import Combine
 import SwiftUI
 
 // MARK: - Window manager
@@ -8,10 +9,16 @@ import SwiftUI
 final class SettingsWindowManager: NSObject, NSWindowDelegate {
     static let shared = SettingsWindowManager()
 
-    private var window: NSWindow?
+    private(set) var window: NSWindow?
+    private let selection = SettingsSelection()
     private var systemMonitor: SystemMonitor?
     private var fanController: FanController?
     private var startupManager: StartupManager?
+
+    init(startupManager: StartupManager? = nil) {
+        self.startupManager = startupManager
+        super.init()
+    }
 
     /// Called once at launch so any surface (toolbar, popovers, app menu)
     /// can open Settings without threading dependencies around.
@@ -27,6 +34,7 @@ final class SettingsWindowManager: NSObject, NSWindowDelegate {
 
     func show(tab: SettingsTab = .general) {
         guard let startupManager else { return }
+        selection.tab = tab
 
         if let window {
             window.makeKeyAndOrderFront(nil)
@@ -36,7 +44,7 @@ final class SettingsWindowManager: NSObject, NSWindowDelegate {
 
         let rootView = SettingsView(
             startupManager: startupManager,
-            initialTab: tab
+            selection: selection
         )
         let hostingController = NSHostingController(rootView: rootView)
         let newWindow = NSWindow(contentViewController: hostingController)
@@ -85,20 +93,17 @@ enum SettingsTab: String, CaseIterable, Identifiable {
 
 // MARK: - Root
 
+@MainActor
+final class SettingsSelection: ObservableObject {
+    @Published var tab: SettingsTab = .general
+}
+
 struct SettingsView: View {
     @ObservedObject var startupManager: StartupManager
-    @State private var tab: SettingsTab
-
-    init(
-        startupManager: StartupManager,
-        initialTab: SettingsTab = .general
-    ) {
-        self.startupManager = startupManager
-        _tab = State(initialValue: initialTab)
-    }
+    @ObservedObject var selection: SettingsSelection
 
     var body: some View {
-        TabView(selection: $tab) {
+        TabView(selection: $selection.tab) {
             GeneralSettingsTab(startupManager: startupManager)
                 .tabItem { Label(SettingsTab.general.title, systemImage: SettingsTab.general.symbolName) }
                 .tag(SettingsTab.general)

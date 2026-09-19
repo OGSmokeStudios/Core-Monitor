@@ -19,6 +19,7 @@ else
     -module-name ventaphobia_smc_helper \
     "${ROOT_DIR}/smc-helper/main.swift" \
     "${ROOT_DIR}/smc-helper/SMCHelperXPC.swift" \
+    "${ROOT_DIR}/Shared/SMCFanDetection.swift" \
     -Xlinker -sectcreate -Xlinker __TEXT -Xlinker __info_plist \
     -Xlinker "${ROOT_DIR}/smc-helper/Info.plist" \
     -Xlinker -sectcreate -Xlinker __TEXT -Xlinker __launchd_plist \

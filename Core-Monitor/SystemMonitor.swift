@@ -186,8 +186,7 @@ final class SystemMonitor: ObservableObject {
     var networkStats: NetworkStats { snapshot.networkStats }
     private var previousNetworkBytes: (sent: UInt64, received: UInt64) = (0, 0)
     private var previousNetworkTime: Date = Date()
-    private var cachedDiskStats = DiskStats()
-    private var lastDiskStatsRefreshAt: Date?
+    private var diskStatsCache = DiskStatsCache()
 
     // MARK: - History buffers (60 samples, used by menu bar popovers)
     private(set) var cpuHistory:     [Double] = Array(repeating: 0, count: 60)
@@ -697,17 +696,12 @@ final class SystemMonitor: ObservableObject {
     }
     // MARK: - Disk stats (via FileManager)
     private func readDiskStats(now: Date = Date()) -> DiskStats {
-        guard DiskStatsRefreshPolicy.shouldRefresh(lastUpdatedAt: lastDiskStatsRefreshAt, now: now) else {
-            return cachedDiskStats
-        }
-
-        var stats = DiskStats()
-        do {
+        diskStatsCache.read(now: now) {
             let attrs = try FileManager.default.attributesOfFileSystem(forPath: NSHomeDirectory())
             guard
                 let totalRaw = attrs[.systemSize] as? Int64,
                 let freeRaw  = attrs[.systemFreeSize] as? Int64
-            else { return stats }
+            else { return nil }
 
             let totalBytes = Double(totalRaw)
             let freeBytes  = Double(freeRaw)
@@ -722,15 +716,14 @@ final class SystemMonitor: ObservableObject {
 
             let usedBytes = max(0, totalBytes - freeBytes - purgeableBytes)
 
+            var stats = DiskStats()
             stats.totalGB       = totalBytes       / 1_073_741_824
             stats.usedGB        = usedBytes        / 1_073_741_824
             stats.freeGB        = freeBytes        / 1_073_741_824
             stats.purgeableGB   = purgeableBytes   / 1_073_741_824
             stats.usagePercent  = totalBytes > 0 ? usedBytes / totalBytes * 100 : 0
-        } catch {}
-        cachedDiskStats = stats
-        lastDiskStatsRefreshAt = now
-        return cachedDiskStats
+            return stats
+        }
     }
 
     private func readFanReadings() -> (speeds: [Int], mins: [Int], maxs: [Int]) {
