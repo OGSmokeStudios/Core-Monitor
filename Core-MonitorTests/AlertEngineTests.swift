@@ -394,6 +394,57 @@ final class AlertEngineTests: XCTestCase {
         )
     }
 
+    func testMissingFanReadingsDoNotTriggerLowSpeedAlerts() {
+        for speeds in [[-1], [-1, -1], [-1, 3_000], [3_000, -1]] {
+            let outcome = evaluateHotFans(speeds: speeds, temperature: 95)
+
+            XCTAssertNil(outcome.activeState, "Speeds: \(speeds)")
+            XCTAssertNil(outcome.event)
+            XCTAssertFalse(outcome.shouldNotify)
+        }
+    }
+
+    func testMissingFirstFanDoesNotHideSlowSecondFan() {
+        let outcome = evaluateHotFans(speeds: [-1, 1_000], temperature: 85)
+
+        XCTAssertEqual(outcome.activeState?.severity, .warning)
+        XCTAssertNotNil(outcome.event)
+    }
+
+    func testZeroRPMStillTriggersCriticalStallAlertUnderHeat() {
+        let outcome = evaluateHotFans(speeds: [-1, 0], temperature: 85)
+
+        XCTAssertEqual(outcome.activeState?.severity, .critical)
+        XCTAssertTrue(outcome.shouldNotify)
+    }
+
+    func testSlowFanStillEscalatesAtCriticalTemperature() {
+        let outcome = evaluateHotFans(speeds: [1_000, -1], temperature: 95)
+
+        XCTAssertEqual(outcome.activeState?.severity, .critical)
+    }
+
+    private func evaluateHotFans(speeds: [Int], temperature: Double) -> AlertEvaluationOutcome {
+        let config = AlertRuleConfig(
+            kind: .fanTooLowUnderHeat,
+            isEnabled: true,
+            threshold: .init(warning: 80, critical: 90, hysteresis: 3),
+            cooldownMinutes: 10,
+            debounceSamples: 1,
+            desktopNotificationsEnabled: true
+        )
+        return AlertEvaluator.evaluate(
+            config: config,
+            runtime: .initial(for: .fanTooLowUnderHeat),
+            input: makeInput { snapshot in
+                snapshot.cpuTemperature = temperature
+                snapshot.numberOfFans = speeds.count
+                snapshot.fanSpeeds = speeds
+                snapshot.fanMinSpeeds = Array(repeating: 1_500, count: speeds.count)
+            }
+        )
+    }
+
     private func makeInput(
         fanMode: FanControlMode = .automatic,
         helperInstalled: Bool = true,

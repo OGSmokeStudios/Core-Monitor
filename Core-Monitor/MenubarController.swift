@@ -119,7 +119,7 @@ final class MenuBarController: NSObject {
 // MARK: - SingleMenuBarItemController
 @MainActor
 final class SingleMenuBarItemController: NSObject, NSPopoverDelegate {
-    private enum StatusTone: Equatable {
+    enum StatusTone: Equatable {
         case normal
         case warning
         case critical
@@ -241,14 +241,7 @@ final class SingleMenuBarItemController: NSObject, NSPopoverDelegate {
             return ("\(pct)%", tone)
 
         case .fan:
-            let speeds = systemMonitor.fanSpeeds.filter { $0 > 0 }
-            guard let highestRPM = speeds.max() else {
-                return ("—", .secondary)
-            }
-
-            let utilization = Double(highestRPM) / Double(max(fanController.maxSpeed, 1))
-            let tone: StatusTone = utilization > 0.85 ? .critical : utilization > 0.6 ? .warning : .normal
-            return (ReadingFormat.rpmShort(highestRPM), tone)
+            return Self.fanStatusLabel(speeds: systemMonitor.fanSpeeds, maximumRPM: fanController.maxSpeed)
 
         case .memory:
             let pct = Int(systemMonitor.memoryUsagePercent.rounded())
@@ -280,6 +273,17 @@ final class SingleMenuBarItemController: NSObject, NSPopoverDelegate {
             }
             return ("—°", .secondary)
         }
+    }
+
+    static func fanStatusLabel(speeds: [Int], maximumRPM: Int) -> (text: String, tone: StatusTone) {
+        // Zero is a valid reading. Only negative values mean the read failed.
+        guard let highestRPM = speeds.filter({ $0 >= 0 }).max() else {
+            return ("—", .secondary)
+        }
+
+        let utilization = Double(highestRPM) / Double(max(maximumRPM, 1))
+        let tone: StatusTone = utilization > 0.85 ? .critical : utilization > 0.6 ? .warning : .normal
+        return (ReadingFormat.rpmShort(highestRPM), tone)
     }
 
     private func statusBarIcon() -> NSImage? {

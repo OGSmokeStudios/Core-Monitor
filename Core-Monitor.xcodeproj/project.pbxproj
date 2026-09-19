@@ -7,6 +7,9 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		A19400012026091900000002 /* FanReadingTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A19400012026091900000001 /* FanReadingTests.swift */; };
+		A19400022026091900000002 /* DiskStatsRefreshPolicyTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A19400022026091900000001 /* DiskStatsRefreshPolicyTests.swift */; };
+		A19400032026091900000002 /* SettingsWindowTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A19400032026091900000001 /* SettingsWindowTests.swift */; };
 		12AF073D73CA92C2A2FBF449 /* Cocoa.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 33D1932E6B3C54A956AF5F6C /* Cocoa.framework */; };
 		23F2064CB38FDB73EE4AB471 /* AlertEngineTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8D6F3C76B69FEDB140682676 /* AlertEngineTests.swift */; };
 		7381A6E82B87236C00C0DE01 /* CustomFanPresetTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7381A6E72B87236C00C0DE01 /* CustomFanPresetTests.swift */; };
@@ -48,6 +51,9 @@
 /* End PBXCopyFilesBuildPhase section */
 
 /* Begin PBXFileReference section */
+		A19400012026091900000001 /* FanReadingTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FanReadingTests.swift; sourceTree = "<group>"; };
+		A19400022026091900000001 /* DiskStatsRefreshPolicyTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DiskStatsRefreshPolicyTests.swift; sourceTree = "<group>"; };
+		A19400032026091900000001 /* SettingsWindowTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsWindowTests.swift; sourceTree = "<group>"; };
 		33D1932E6B3C54A956AF5F6C /* Cocoa.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = Cocoa.framework; path = Platforms/MacOSX.platform/Developer/SDKs/MacOSX15.0.sdk/System/Library/Frameworks/Cocoa.framework; sourceTree = DEVELOPER_DIR; };
 		353B02D12F640A0700A65F2C /* Core-Monitor.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = "Core-Monitor.app"; sourceTree = BUILT_PRODUCTS_DIR; };
 		35F039AB2F64444D004CB9F8 /* smc-helper */ = {isa = PBXFileReference; explicitFileType = "compiled.mach-o.executable"; includeInIndex = 0; name = "smc-helper"; path = "ventaphobia.smc-helper"; sourceTree = BUILT_PRODUCTS_DIR; };
@@ -63,6 +69,11 @@
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedRootGroup section */
+		A19300012026091900000001 /* Shared */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			path = Shared;
+			sourceTree = "<group>";
+		};
 		353B02D32F640A0700A65F2C /* Core-Monitor */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
 			path = "Core-Monitor";
@@ -104,6 +115,9 @@
 		1A2F97F19E4BA4C0B1070411 /* Core-MonitorTests */ = {
 			isa = PBXGroup;
 			children = (
+				A19400012026091900000001 /* FanReadingTests.swift */,
+				A19400022026091900000001 /* DiskStatsRefreshPolicyTests.swift */,
+				A19400032026091900000001 /* SettingsWindowTests.swift */,
 				8D6F3C76B69FEDB140682676 /* AlertEngineTests.swift */,
 				7381A6E72B87236C00C0DE01 /* CustomFanPresetTests.swift */,
 				DABD10012F96000100000001 /* CoreMonitorShareKitTests.swift */,
@@ -119,6 +133,7 @@
 		353B02C82F640A0700A65F2C = {
 			isa = PBXGroup;
 			children = (
+				A19300012026091900000001 /* Shared */,
 				353B02D32F640A0700A65F2C /* Core-Monitor */,
 				35F039AC2F64444D004CB9F8 /* smc-helper */,
 				353B02D22F640A0700A65F2C /* Products */,
@@ -172,6 +187,7 @@
 			);
 			fileSystemSynchronizedGroups = (
 				353B02D32F640A0700A65F2C /* Core-Monitor */,
+				A19300012026091900000001 /* Shared */,
 			);
 			name = "Core-Monitor";
 			productName = "Core-Monitor";
@@ -192,6 +208,7 @@
 			);
 			fileSystemSynchronizedGroups = (
 				35F039AC2F64444D004CB9F8 /* smc-helper */,
+				A19300012026091900000001 /* Shared */,
 			);
 			name = "smc-helper";
 			productName = "smc-helper";
@@ -314,6 +331,9 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				A19400012026091900000002 /* FanReadingTests.swift in Sources */,
+				A19400022026091900000002 /* DiskStatsRefreshPolicyTests.swift in Sources */,
+				A19400032026091900000002 /* SettingsWindowTests.swift in Sources */,
 				23F2064CB38FDB73EE4AB471 /* AlertEngineTests.swift in Sources */,
 				7381A6E82B87236C00C0DE01 /* CustomFanPresetTests.swift in Sources */,
 				DABD10022F96000100000002 /* CoreMonitorShareKitTests.swift in Sources */,

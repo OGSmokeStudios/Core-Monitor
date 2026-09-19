@@ -284,16 +284,7 @@ private final class SMCController {
             return Int(directCount.rounded())
         }
 
-        for fanID in 0..<12 {
-            let actualKey = String(format: "F%dAc", fanID)
-            let minKey = String(format: "F%dMn", fanID)
-            let maxKey = String(format: "F%dMx", fanID)
-            if keyExists(actualKey) || keyExists(minKey) || keyExists(maxKey) {
-                return fanID + 1
-            }
-        }
-
-        return 0
+        return SMCFanDetection.fallbackCount(keyExists: keyExists)
     }
 
     private func validatedHardwareRPM(for fanID: Int, requestedRPM: Int) throws -> Int {

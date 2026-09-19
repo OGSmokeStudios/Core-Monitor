@@ -352,6 +352,7 @@ enum AlertEvaluator {
             let lowFanIndex = zip(input.snapshot.fanSpeeds, input.snapshot.fanMinSpeeds)
                 .enumerated()
                 .first { _, pair in
+                    guard pair.0 >= 0 else { return false }
                     let floor = max(pair.1 + 150, 1_200)
                     return pair.0 < floor
                 }?

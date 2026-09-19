@@ -1013,18 +1013,9 @@ final class FanController: ObservableObject {
             return directCount
         }
 
-        for fanID in 0..<12 {
-            let actualKey = String(format: "F%dAc", fanID)
-            let minKey = String(format: "F%dMn", fanID)
-            let maxKey = String(format: "F%dMx", fanID)
-            if helperManager.readValue(key: actualKey) != nil ||
-                helperManager.readValue(key: minKey) != nil ||
-                helperManager.readValue(key: maxKey) != nil {
-                return fanID + 1
-            }
+        return SMCFanDetection.fallbackCount { key in
+            helperManager.readValue(key: key) != nil
         }
-
-        return 0
     }
 
     private func helperUnavailableMessage() -> String {
