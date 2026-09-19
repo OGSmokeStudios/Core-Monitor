@@ -33,6 +33,9 @@ final class RuntimeSafetyTests: XCTestCase {
         let ticket = try XCTUnwrap(session.begin())
         XCTAssertTrue(session.complete(ticket))
         XCTAssertFalse(session.complete(ticket))
+        let next = try XCTUnwrap(session.begin())
+        XCTAssertFalse(session.complete(ticket))
+        XCTAssertTrue(session.complete(next))
     }
 
     func testNetworkCountsMoreThanOne32BitWrapBetweenSamples() {

@@ -20,6 +20,7 @@ struct SamplingSession {
 
     mutating func begin() -> UInt64? {
         guard active, !inFlight else { return nil }
+        generation &+= 1
         inFlight = true
         return generation
     }
