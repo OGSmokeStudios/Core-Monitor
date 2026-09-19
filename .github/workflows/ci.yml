@@ -4,6 +4,7 @@ on:
   push:
     branches:
       - main
+      - validation/five-fixes
   pull_request:
 
 permissions:
