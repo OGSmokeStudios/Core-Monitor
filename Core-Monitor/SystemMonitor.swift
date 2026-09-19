@@ -184,8 +184,9 @@ final class SystemMonitor: ObservableObject {
         var downloadBytesPerSec: Double = 0
     }
     var networkStats: NetworkStats { snapshot.networkStats }
-    private var previousNetworkBytes: (sent: UInt64, received: UInt64) = (0, 0)
-    private var previousNetworkTime: Date = Date()
+    private var networkCounterTracker = NetworkCounterTracker()
+    private var cachedNetworkStats = NetworkStats()
+    private var cachedCPUStats = CPUStats(usagePercent: 0, performanceCoreUsagePercent: nil, efficiencyCoreUsagePercent: nil)
     private var diskStatsCache = DiskStatsCache()
 
     // MARK: - History buffers (60 samples, used by menu bar popovers)
@@ -254,7 +255,7 @@ final class SystemMonitor: ObservableObject {
     private var timer: Timer?
     private var keyInfoCache: [UInt32: SMCKeyData_keyInfo_t] = [:]
     private let samplingQueue = DispatchQueue(label: "CoreMonitor.SystemMonitorSampling", qos: .utility)
-    private var isSampling = false
+    private var samplingSession = SamplingSession()
     // SMC connection state is owned exclusively by the sampling queue and only
     // mirrored back into the @Published snapshot on the main thread. These plain
     // vars must never be read or written off that queue.
@@ -297,7 +298,7 @@ final class SystemMonitor: ObservableObject {
     private let smcReadBytes: UInt8 = 5
     private let smcReadKeyInfo: UInt8 = 9
     private let kernelIndexSmc: UInt32 = 2
-    private let maxFanProbeCount = 12
+    private let maxFanProbeCount = SMCFanDetection.maximumFanCount
 
     init(privacySettings: PrivacySettings? = nil) {
         self.privacySettings = privacySettings ?? .shared
@@ -325,7 +326,9 @@ final class SystemMonitor: ObservableObject {
     }
 
     func startMonitoring() {
+        guard !isMonitoringActive else { return }
         isMonitoringActive = true
+        samplingSession.start()
         supplementalSamplingState.reset()
         // SMC open + fan detection run inside the first sample on the sampling
         // queue, keeping all SMC access confined to that queue.
@@ -345,6 +348,7 @@ final class SystemMonitor: ObservableObject {
 
     func stopMonitoring() {
         isMonitoringActive = false
+        samplingSession.stop()
         timer?.invalidate()
         timer = nil
         activitySampler.stop()
@@ -435,7 +439,7 @@ final class SystemMonitor: ObservableObject {
     /// Detects the fan count over SMC. Must run on the sampling queue; writes
     /// only the queue-owned fan count, which is mirrored into the snapshot later.
     private func detectFans() {
-        if let directCount = readSMCValue(key: "FNum").map(Int.init), directCount > 0 {
+        if let directCount = SMCFanDetection.validatedCount(readSMCValue(key: "FNum")) {
             detectedFanCountOnQueue = directCount
             return
         }
@@ -455,12 +459,8 @@ final class SystemMonitor: ObservableObject {
     }
 
     private func updateReadings() {
-        guard !isSampling else { return }
-        isSampling = true
+        guard let ticket = samplingSession.begin() else { return }
         let activeMonitoringInterval = monitoringInterval
-        // Captured on the main thread; the sampling queue must not read the
-        // @Published snapshot directly.
-        let carriedTopProcesses = snapshot.topProcesses
 
         samplingQueue.async { [weak self] in
             guard let self else { return }
@@ -488,7 +488,7 @@ final class SystemMonitor: ObservableObject {
             let networkStats = self.readNetworkStats()
             let thermalState = ProcessInfo.processInfo.thermalState
 
-            var snapshot = SystemMonitorSnapshot(
+            let snapshot = SystemMonitorSnapshot(
                 sampledAt: sampledAt,
                 cpuTemperature: cpuTemperature?.average,
                 gpuTemperature: gpuTemperature?.average,
@@ -529,13 +529,19 @@ final class SystemMonitor: ObservableObject {
                 },
                 networkStats: networkStats,
                 thermalState: thermalState,
-                topProcesses: carriedTopProcesses,
+                topProcesses: .empty,
                 hasSMCAccess: self.smcAccessibleOnQueue,
                 lastError: self.smcLastErrorOnQueue
             )
 
             DispatchQueue.main.async { [weak self] in
-                guard let self else { return }
+                guard let self, self.samplingSession.complete(ticket) else { return }
+                var snapshot = snapshot
+
+                // Process sampling has its own cadence and privacy lifecycle.
+                // Carry its current main-thread value, never an older capture.
+                snapshot.topProcesses = self.privacySettings.processInsightsEnabled
+                    ? self.snapshot.topProcesses : .empty
 
                 self.cpuHistory.removeFirst()
                 self.cpuHistory.append(snapshot.cpuUsagePercent)
@@ -555,7 +561,6 @@ final class SystemMonitor: ObservableObject {
                 self.networkUploadTrend.append(snapshot.networkStats.uploadBytesPerSec, at: sampleTimestamp)
                 self.networkDownloadTrend.append(snapshot.networkStats.downloadBytesPerSec, at: sampleTimestamp)
                 self.snapshot = snapshot
-                self.isSampling = false
             }
         }
     }
@@ -575,6 +580,7 @@ final class SystemMonitor: ObservableObject {
     }
 
     private func updateTopProcesses(_ topProcesses: TopProcessSnapshot) {
+        guard isMonitoringActive, privacySettings.processInsightsEnabled else { return }
         var updatedSnapshot = snapshot
         updatedSnapshot.topProcesses = topProcesses
         snapshot = updatedSnapshot
@@ -648,52 +654,14 @@ final class SystemMonitor: ObservableObject {
         }
     }
 
-    // MARK: - Network throughput via getifaddrs
+    // MARK: - Network throughput (queue-owned 64-bit interface counters)
     private func readNetworkStats() -> NetworkStats {
-        var totalSent: UInt64 = 0
-        var totalReceived: UInt64 = 0
-
-        var ifap: UnsafeMutablePointer<ifaddrs>?
-        guard getifaddrs(&ifap) == 0, let firstAddr = ifap else { return networkStats }
-        defer { freeifaddrs(ifap) }
-
-        var cursor: UnsafeMutablePointer<ifaddrs>? = firstAddr
-        while let ifa = cursor {
-            let interface = ifa.pointee
-
-            if let data = interface.ifa_data {
-                let name = String(cString: interface.ifa_name)
-
-                // Skip loopback, only count physical / WiFi interfaces
-                if name != "lo0" {
-                    let stats = data.assumingMemoryBound(to: if_data.self).pointee
-                    totalSent += UInt64(stats.ifi_obytes)
-                    totalReceived += UInt64(stats.ifi_ibytes)
-                }
-            }
-
-            cursor = interface.ifa_next
-        }
-
-        let now = Date()
-        let elapsed = now.timeIntervalSince(previousNetworkTime)
-        guard elapsed > 0, previousNetworkBytes.sent > 0 || previousNetworkBytes.received > 0 else {
-            previousNetworkBytes = (totalSent, totalReceived)
-            previousNetworkTime = now
-            return networkStats
-        }
-
-        let sentDelta = totalSent >= previousNetworkBytes.sent ? totalSent - previousNetworkBytes.sent : 0
-        let receivedDelta = totalReceived >= previousNetworkBytes.received ? totalReceived - previousNetworkBytes.received : 0
-
-        previousNetworkBytes = (totalSent, totalReceived)
-        previousNetworkTime = now
-
-        return NetworkStats(
-            uploadBytesPerSec: Double(sentDelta) / elapsed,
-            downloadBytesPerSec: Double(receivedDelta) / elapsed
-        )
+        guard let counters = NetworkCounterReader.read() else { return cachedNetworkStats }
+        let rates = networkCounterTracker.sample(counters, at: ProcessInfo.processInfo.systemUptime)
+        cachedNetworkStats = NetworkStats(uploadBytesPerSec: rates.sent, downloadBytesPerSec: rates.received)
+        return cachedNetworkStats
     }
+
     // MARK: - Disk stats (via FileManager)
     private func readDiskStats(now: Date = Date()) -> DiskStats {
         diskStatsCache.read(now: now) {
@@ -756,6 +724,11 @@ final class SystemMonitor: ObservableObject {
     }
 
     private func readCPUUsage() -> CPUStats {
+        cachedCPUStats = sampleCPUUsage()
+        return cachedCPUStats
+    }
+
+    private func sampleCPUUsage() -> CPUStats {
         var loadInfo = host_cpu_load_info_data_t()
         var count = mach_msg_type_number_t(MemoryLayout<host_cpu_load_info_data_t>.stride / MemoryLayout<integer_t>.stride)
 
@@ -767,9 +740,9 @@ final class SystemMonitor: ObservableObject {
 
         guard result == KERN_SUCCESS else {
             return CPUStats(
-                usagePercent: cpuUsagePercent,
-                performanceCoreUsagePercent: performanceCoreUsagePercent,
-                efficiencyCoreUsagePercent: efficiencyCoreUsagePercent
+                usagePercent: cachedCPUStats.usagePercent,
+                performanceCoreUsagePercent: cachedCPUStats.performanceCoreUsagePercent,
+                efficiencyCoreUsagePercent: cachedCPUStats.efficiencyCoreUsagePercent
             )
         }
 
@@ -777,9 +750,9 @@ final class SystemMonitor: ObservableObject {
             previousCPULoadInfo = loadInfo
             hasPreviousCPUInfo = true
             return CPUStats(
-                usagePercent: cpuUsagePercent,
-                performanceCoreUsagePercent: performanceCoreUsagePercent,
-                efficiencyCoreUsagePercent: efficiencyCoreUsagePercent
+                usagePercent: cachedCPUStats.usagePercent,
+                performanceCoreUsagePercent: cachedCPUStats.performanceCoreUsagePercent,
+                efficiencyCoreUsagePercent: cachedCPUStats.efficiencyCoreUsagePercent
             )
         }
 
@@ -795,9 +768,9 @@ final class SystemMonitor: ObservableObject {
         let total = user + system + idle + nice
         guard total > 0 else {
             return CPUStats(
-                usagePercent: cpuUsagePercent,
-                performanceCoreUsagePercent: performanceCoreUsagePercent,
-                efficiencyCoreUsagePercent: efficiencyCoreUsagePercent
+                usagePercent: cachedCPUStats.usagePercent,
+                performanceCoreUsagePercent: cachedCPUStats.performanceCoreUsagePercent,
+                efficiencyCoreUsagePercent: cachedCPUStats.efficiencyCoreUsagePercent
             )
         }
 
@@ -824,7 +797,7 @@ final class SystemMonitor: ObservableObject {
         )
 
         guard result == KERN_SUCCESS, let processorInfo else {
-            return (performanceCoreUsagePercent, efficiencyCoreUsagePercent)
+            return (cachedCPUStats.performanceCoreUsagePercent, cachedCPUStats.efficiencyCoreUsagePercent)
         }
 
         defer {
@@ -835,13 +808,13 @@ final class SystemMonitor: ObservableObject {
         let sample = Array(UnsafeBufferPointer(start: processorInfo, count: Int(processorInfoCount)))
         let cpuCount = Int(processorCount)
         guard cpuCount > 0, sample.count >= cpuCount * Int(CPU_STATE_MAX) else {
-            return (performanceCoreUsagePercent, efficiencyCoreUsagePercent)
+            return (cachedCPUStats.performanceCoreUsagePercent, cachedCPUStats.efficiencyCoreUsagePercent)
         }
 
         if !hasPreviousProcessorInfo || previousProcessorLoadInfo.count != sample.count {
             previousProcessorLoadInfo = sample
             hasPreviousProcessorInfo = true
-            return (performanceCoreUsagePercent, efficiencyCoreUsagePercent)
+            return (cachedCPUStats.performanceCoreUsagePercent, cachedCPUStats.efficiencyCoreUsagePercent)
         }
 
         defer { previousProcessorLoadInfo = sample }
@@ -851,7 +824,7 @@ final class SystemMonitor: ObservableObject {
             performanceCoreCount: SystemMonitor.performanceCoreCount(),
             efficiencyCoreCount: SystemMonitor.efficiencyCoreCount()
         ) else {
-            return (performanceCoreUsagePercent, efficiencyCoreUsagePercent)
+            return (cachedCPUStats.performanceCoreUsagePercent, cachedCPUStats.efficiencyCoreUsagePercent)
         }
 
         let performanceUsage = usageForProcessorRange(

@@ -98,8 +98,8 @@ enum HelperDiagnosticsExporter {
         helperManager: SMCHelperManager,
         startupManager: StartupManager,
         menuBarSettings: MenuBarSettings
-    ) throws -> URL? {
-        let context = makeContext(
+    ) async throws -> URL? {
+        let context = await makeContext(
             helperManager: helperManager,
             startupManager: startupManager,
             menuBarSettings: menuBarSettings
@@ -132,14 +132,14 @@ enum HelperDiagnosticsExporter {
         helperManager: SMCHelperManager,
         startupManager: StartupManager,
         menuBarSettings: MenuBarSettings
-    ) -> HelperDiagnosticsContext {
+    ) async -> HelperDiagnosticsContext {
         let helperLabel = HelperConfiguration.label
         let bundledHelperURL = Bundle.main.bundleURL
             .appendingPathComponent("Contents/Library/LaunchServices/\(helperLabel)")
         let installedHelperPath = "/Library/PrivilegedHelperTools/\(helperLabel)"
         let fileManager = FileManager.default
         let hostModelIdentifier = SystemMonitor.hostModelIdentifier()
-        let controlMetadata = helperManager.readControlMetadata()
+        let controlMetadata = await helperManager.readControlMetadata()
 
         return HelperDiagnosticsContext(
             generatedAt: Date(),
