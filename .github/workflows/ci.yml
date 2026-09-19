@@ -4,6 +4,7 @@ on:
   push:
     branches:
       - main
+      - validation/final-followups
   pull_request:
 
 permissions:
@@ -42,6 +43,10 @@ jobs:
             -enableCodeCoverage YES \
             -resultBundlePath build/ci/Core-Monitor.xcresult \
             CODE_SIGNING_ALLOWED=NO
+
+      - name: Summarize test results
+        if: always()
+        run: xcrun xcresulttool get test-results summary --path build/ci/Core-Monitor.xcresult
 
       - name: Check optimized helper lifetime
         run: ./scripts/tests/check_helper_lifetime.sh
