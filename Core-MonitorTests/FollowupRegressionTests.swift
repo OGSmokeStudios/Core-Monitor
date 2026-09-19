@@ -14,16 +14,24 @@ final class FollowupRegressionTests: XCTestCase {
         privacy.processInsightsEnabled = true
         var store = AlertStore.default()
         store.desktopNotificationsEnabled = false
-        store.history = [AlertEvent(id: UUID(), kind: .cpuUsage, severity: .warning,
+        store.ruleConfigs = store.ruleConfigs.map { config in
+            var config = config
+            config.isEnabled = false
+            return config
+        }
+        let eventID = UUID()
+        store.history = [AlertEvent(id: eventID, kind: .cpuUsage, severity: .warning,
             title: "CPU", message: "Busy", context: "PrivateProcess", timestamp: Date(), isRecovery: false)]
         defaults.set(try JSONEncoder().encode(store), forKey: "coremonitor.alertStore.v1")
         let monitor = SystemMonitor(privacySettings: privacy)
         let manager = AlertManager(systemMonitor: monitor, fanController: FanController(systemMonitor: monitor),
                                    privacySettings: privacy, userDefaults: defaults)
-        XCTAssertEqual(manager.history.first?.context, "PrivateProcess")
+        XCTAssertEqual(manager.history.first(where: { $0.id == eventID })?.context, "PrivateProcess")
         let redacted = expectation(description: "History redacted on main thread")
-        let subscription = manager.$history.dropFirst().sink { events in
-            guard events.first?.context == nil else { return }
+        let subscription = manager.$history.dropFirst()
+            .filter { $0.contains { $0.id == eventID && $0.context == nil } }
+            .prefix(1)
+            .sink { _ in
             XCTAssertTrue(Thread.isMainThread)
             redacted.fulfill()
         }
@@ -32,7 +40,8 @@ final class FollowupRegressionTests: XCTestCase {
         subscription.cancel()
         XCTAssertFalse(manager.processInsightsEnabled)
         let persisted = try JSONDecoder().decode(AlertStore.self, from: XCTUnwrap(defaults.data(forKey: "coremonitor.alertStore.v1")))
-        XCTAssertNil(persisted.history.first?.context)
+        let savedEvent = try XCTUnwrap(persisted.history.first(where: { $0.id == eventID }))
+        XCTAssertNil(savedEvent.context)
     }
 
     func testReusedPIDStartsNewDiskBaselineEvenWhenCountersIncrease() {

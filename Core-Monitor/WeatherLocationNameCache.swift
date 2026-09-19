@@ -41,7 +41,8 @@ actor WeatherLocationNameCache {
         }
         if let pending, pending.localeIdentifier == locale.identifier,
            location.distance(from: pending.location) <= distanceThreshold {
-            return (try? await pending.task.value) ?? "Weather"
+            let resolved = try? await pending.task.value
+            return resolved.flatMap { $0.isEmpty ? nil : $0 } ?? "Weather"
         }
 
         let id = UUID()

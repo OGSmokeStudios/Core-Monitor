@@ -13,9 +13,9 @@ final class SingleInstanceLock {
     deinit { if let descriptor { Darwin.close(descriptor) } }
 
     static func fileURL(bundleIdentifier: String) throws -> URL {
-        let caches = try FileManager.default.url(for: .cachesDirectory, in: .userDomainMask, appropriateFor: nil, create: true)
+        let support = try FileManager.default.url(for: .applicationSupportDirectory, in: .userDomainMask, appropriateFor: nil, create: true)
         let name = bundleIdentifier.replacingOccurrences(of: "/", with: "_")
-        return caches.appendingPathComponent(name, isDirectory: true).appendingPathComponent("single-instance.lock")
+        return support.appendingPathComponent(name, isDirectory: true).appendingPathComponent("single-instance.lock")
     }
 
     func acquire() throws -> Bool {
