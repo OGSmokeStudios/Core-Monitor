@@ -20,11 +20,13 @@ final class CoreMonitorSingleInstancePolicyTests: XCTestCase {
         let request = CoreMonitorDashboardHandoffRequest(bundleIdentifier: "CoreTools.Core-Monitor", targetProcessIdentifier: 901,
                                                         requesterProcessIdentifier: 900)
         XCTAssertTrue(CoreMonitorDashboardHandoffRequest.acceptsAcknowledgement(userInfo: request.userInfo,
-            bundleIdentifier: request.bundleIdentifier, requestIdentifier: request.requestIdentifier, requesterPID: 900))
+            bundleIdentifier: request.bundleIdentifier, requestIdentifier: request.requestIdentifier, requesterPID: 900, ownerPID: 901))
         XCTAssertFalse(CoreMonitorDashboardHandoffRequest.acceptsAcknowledgement(userInfo: request.userInfo,
-            bundleIdentifier: request.bundleIdentifier, requestIdentifier: UUID(), requesterPID: 900))
+            bundleIdentifier: request.bundleIdentifier, requestIdentifier: UUID(), requesterPID: 900, ownerPID: 901))
         XCTAssertFalse(CoreMonitorDashboardHandoffRequest.acceptsAcknowledgement(userInfo: request.userInfo,
-            bundleIdentifier: request.bundleIdentifier, requestIdentifier: request.requestIdentifier, requesterPID: 902))
+            bundleIdentifier: request.bundleIdentifier, requestIdentifier: request.requestIdentifier, requesterPID: 902, ownerPID: 901))
+        XCTAssertFalse(CoreMonitorDashboardHandoffRequest.acceptsAcknowledgement(userInfo: request.userInfo,
+            bundleIdentifier: request.bundleIdentifier, requestIdentifier: request.requestIdentifier, requesterPID: 900, ownerPID: 902))
     }
 
     func testDashboardHandoffRequestRequiresExpectedBundleAndTargetPID() {
@@ -74,7 +76,7 @@ final class CoreMonitorSingleInstancePolicyTests: XCTestCase {
         XCTAssertTrue(CoreMonitorDashboardHandoffRequest.accepts(userInfo: info,
             expectedBundleIdentifier: request.bundleIdentifier, currentProcessIdentifier: 901))
         XCTAssertTrue(CoreMonitorDashboardHandoffRequest.acceptsAcknowledgement(userInfo: info,
-            bundleIdentifier: request.bundleIdentifier, requestIdentifier: request.requestIdentifier, requesterPID: 900))
+            bundleIdentifier: request.bundleIdentifier, requestIdentifier: request.requestIdentifier, requesterPID: 900, ownerPID: 901))
         XCTAssertNil(CoreMonitorDashboardHandoffRequest.notificationInfo(object: "invalid", legacyUserInfo: nil))
         XCTAssertNil(CoreMonitorDashboardHandoffRequest.notificationInfo(object: String(repeating: "x", count: 4_097), legacyUserInfo: nil))
     }

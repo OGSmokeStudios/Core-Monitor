@@ -67,11 +67,12 @@ struct CoreMonitorDashboardHandoffRequest: Equatable {
 
     static func acceptsAcknowledgement(
         userInfo: [AnyHashable: Any]?, bundleIdentifier: String,
-        requestIdentifier: UUID, requesterPID: pid_t
+        requestIdentifier: UUID, requesterPID: pid_t, ownerPID: pid_t
     ) -> Bool {
         userInfo?[bundleIdentifierKey] as? String == bundleIdentifier &&
         userInfo?["requestIdentifier"] as? String == requestIdentifier.uuidString &&
-        (userInfo?["requesterProcessIdentifier"] as? NSNumber)?.int32Value == requesterPID
+        (userInfo?["requesterProcessIdentifier"] as? NSNumber)?.int32Value == requesterPID &&
+        (userInfo?[targetProcessIdentifierKey] as? NSNumber)?.int32Value == ownerPID
     }
 
     static func accepts(
@@ -231,6 +232,7 @@ final class CoreMonitorApplicationDelegate: NSObject, NSApplicationDelegate {
     private var instanceLock: SingleInstanceLock?
     private var handoffTask: Task<Void, Never>?
     private var acknowledgedHandoff: UUID?
+    private var handoffTargetPID: pid_t?
     private var lastDashboardRequestIdentifier: String?
     private var pendingInitialDashboardAttempts: [DispatchWorkItem] = []
     private var quitShortcutMonitor: Any?
@@ -586,13 +588,17 @@ final class CoreMonitorApplicationDelegate: NSObject, NSApplicationDelegate {
             let observer = DistributedNotificationCenter.default().addObserver(
                 forName: Self.dashboardAcknowledgementNotification, object: nil, queue: .main
             ) { [weak self] notification in
-                guard CoreMonitorDashboardHandoffRequest.acceptsAcknowledgement(
-                    userInfo: CoreMonitorDashboardHandoffRequest.notificationInfo(
-                        object: notification.object, legacyUserInfo: notification.userInfo
-                    ), bundleIdentifier: bundleIdentifier,
-                    requestIdentifier: requestID, requesterPID: currentPID
-                ) else { return }
-                Task { @MainActor [weak self] in self?.acknowledgedHandoff = requestID }
+                let info = CoreMonitorDashboardHandoffRequest.notificationInfo(
+                    object: notification.object, legacyUserInfo: notification.userInfo
+                )
+                Task { @MainActor [weak self] in
+                    guard let self, let ownerPID = handoffTargetPID,
+                          CoreMonitorDashboardHandoffRequest.acceptsAcknowledgement(
+                            userInfo: info, bundleIdentifier: bundleIdentifier,
+                            requestIdentifier: requestID, requesterPID: currentPID, ownerPID: ownerPID
+                          ) else { return }
+                    acknowledgedHandoff = requestID
+                }
             }
             defer { DistributedNotificationCenter.default().removeObserver(observer) }
 
@@ -618,6 +624,10 @@ final class CoreMonitorApplicationDelegate: NSObject, NSApplicationDelegate {
                 if let target = CoreMonitorSingleInstancePolicy.handoffTarget(
                     from: instances, currentPID: currentPID, ownerPID: lock.ownerPID
                 ), let application = applications.first(where: { $0.processIdentifier == target.processIdentifier }) {
+                    if handoffTargetPID != target.processIdentifier {
+                        handoffTargetPID = target.processIdentifier
+                        acknowledgedHandoff = nil
+                    }
                     if acknowledgedHandoff == requestID {
                         NSApp.terminate(nil)
                         return
