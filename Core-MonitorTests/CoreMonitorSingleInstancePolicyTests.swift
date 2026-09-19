@@ -65,4 +65,17 @@ final class CoreMonitorSingleInstancePolicyTests: XCTestCase {
             )
         )
     }
+
+    func testHandoffRoundTripsInSandboxCompatibleObjectWithoutUserInfo() throws {
+        let request = CoreMonitorDashboardHandoffRequest(bundleIdentifier: "CoreTools.Core-Monitor",
+                                                        targetProcessIdentifier: 901, requesterProcessIdentifier: 900)
+        let object = try XCTUnwrap(request.notificationObject)
+        let info = CoreMonitorDashboardHandoffRequest.notificationInfo(object: object, legacyUserInfo: nil)
+        XCTAssertTrue(CoreMonitorDashboardHandoffRequest.accepts(userInfo: info,
+            expectedBundleIdentifier: request.bundleIdentifier, currentProcessIdentifier: 901))
+        XCTAssertTrue(CoreMonitorDashboardHandoffRequest.acceptsAcknowledgement(userInfo: info,
+            bundleIdentifier: request.bundleIdentifier, requestIdentifier: request.requestIdentifier, requesterPID: 900))
+        XCTAssertNil(CoreMonitorDashboardHandoffRequest.notificationInfo(object: "invalid", legacyUserInfo: nil))
+        XCTAssertNil(CoreMonitorDashboardHandoffRequest.notificationInfo(object: String(repeating: "x", count: 4_097), legacyUserInfo: nil))
+    }
 }

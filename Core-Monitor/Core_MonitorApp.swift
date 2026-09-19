@@ -49,6 +49,22 @@ struct CoreMonitorDashboardHandoffRequest: Equatable {
         ]
     }
 
+    var notificationObject: String? { Self.notificationObject(for: userInfo) }
+
+    static func notificationObject(for info: [AnyHashable: Any]?) -> String? {
+        guard let info, let data = try? JSONSerialization.data(withJSONObject: info) else { return nil }
+        return String(data: data, encoding: .utf8)
+    }
+
+    static func notificationInfo(object: Any?, legacyUserInfo: [AnyHashable: Any]?) -> [AnyHashable: Any]? {
+        if let object = object as? String, object.utf8.count <= 4_096,
+           let data = object.data(using: .utf8),
+           let info = try? JSONSerialization.jsonObject(with: data) as? [String: Any] {
+            return info
+        }
+        return legacyUserInfo
+    }
+
     static func acceptsAcknowledgement(
         userInfo: [AnyHashable: Any]?, bundleIdentifier: String,
         requestIdentifier: UUID, requesterPID: pid_t
@@ -440,17 +456,19 @@ final class CoreMonitorApplicationDelegate: NSObject, NSApplicationDelegate {
 
         distributedDashboardRequestObserver = DistributedNotificationCenter.default().addObserver(
             forName: Self.openDashboardRequestNotification,
-            object: bundleIdentifier,
+            object: nil,
             queue: .main
         ) { [weak self] notification in
+            let info = CoreMonitorDashboardHandoffRequest.notificationInfo(
+                object: notification.object, legacyUserInfo: notification.userInfo
+            )
             guard CoreMonitorDashboardHandoffRequest.accepts(
-                userInfo: notification.userInfo,
+                userInfo: info,
                 expectedBundleIdentifier: bundleIdentifier,
                 currentProcessIdentifier: ProcessInfo.processInfo.processIdentifier
             ) else {
                 return
             }
-            let info = notification.userInfo
             Task { @MainActor [weak self] in
                 guard let self else { return }
                 let requestID = info?["requestIdentifier"] as? String
@@ -458,10 +476,11 @@ final class CoreMonitorApplicationDelegate: NSObject, NSApplicationDelegate {
                     openDashboard()
                     lastDashboardRequestIdentifier = requestID
                 }
-                if requestID != nil, dashboardController?.isDashboardVisible == true {
+                if requestID != nil, dashboardController?.isDashboardVisible == true,
+                   let object = CoreMonitorDashboardHandoffRequest.notificationObject(for: info) {
                     DistributedNotificationCenter.default().postNotificationName(
-                        Self.dashboardAcknowledgementNotification, object: bundleIdentifier,
-                        userInfo: info, deliverImmediately: true
+                        Self.dashboardAcknowledgementNotification, object: object,
+                        userInfo: nil, deliverImmediately: true
                     )
                 }
             }
@@ -565,10 +584,12 @@ final class CoreMonitorApplicationDelegate: NSObject, NSApplicationDelegate {
         handoffTask = Task { @MainActor [weak self] in
             guard let self else { return }
             let observer = DistributedNotificationCenter.default().addObserver(
-                forName: Self.dashboardAcknowledgementNotification, object: bundleIdentifier, queue: .main
+                forName: Self.dashboardAcknowledgementNotification, object: nil, queue: .main
             ) { [weak self] notification in
                 guard CoreMonitorDashboardHandoffRequest.acceptsAcknowledgement(
-                    userInfo: notification.userInfo, bundleIdentifier: bundleIdentifier,
+                    userInfo: CoreMonitorDashboardHandoffRequest.notificationInfo(
+                        object: notification.object, legacyUserInfo: notification.userInfo
+                    ), bundleIdentifier: bundleIdentifier,
                     requestIdentifier: requestID, requesterPID: currentPID
                 ) else { return }
                 Task { @MainActor [weak self] in self?.acknowledgedHandoff = requestID }
@@ -604,10 +625,14 @@ final class CoreMonitorApplicationDelegate: NSObject, NSApplicationDelegate {
                     let request = CoreMonitorDashboardHandoffRequest(bundleIdentifier: bundleIdentifier,
                         targetProcessIdentifier: target.processIdentifier, requestIdentifier: requestID,
                         requesterProcessIdentifier: currentPID)
-                    DistributedNotificationCenter.default().postNotificationName(
-                        Self.openDashboardRequestNotification, object: bundleIdentifier,
-                        userInfo: request.userInfo, deliverImmediately: true
-                    )
+                    // App Sandbox requires a nil userInfo dictionary. The
+                    // object is a bounded JSON string with the same routing IDs.
+                    if let object = request.notificationObject {
+                        DistributedNotificationCenter.default().postNotificationName(
+                            Self.openDashboardRequestNotification, object: object,
+                            userInfo: nil, deliverImmediately: true
+                        )
+                    }
                     if target.isFinishedLaunching {
                         _ = application.activate(options: [.activateAllWindows, .activateIgnoringOtherApps])
                     }
