@@ -4,6 +4,7 @@ on:
   push:
     branches:
       - main
+      - validation/remaining-issues
   pull_request:
 
 permissions:
