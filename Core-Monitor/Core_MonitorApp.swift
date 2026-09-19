@@ -485,7 +485,6 @@ final class CoreMonitorApplicationDelegate: NSObject, NSApplicationDelegate {
             coordinator: coordinator,
             startupManager: startupManager
         ) { [weak self] in
-            self?.dashboardController = nil
             self?.restoreAccessoryActivationPolicyIfNeeded()
         }
         debugLaunch("dashboardController created")

@@ -480,7 +480,7 @@ final class WeatherViewModel: ObservableObject {
         do {
             try await loadWeatherSnapshot(using: provider, location: location)
         } catch {
-            if let lastSnapshot {
+            if let lastSnapshot, Self.isFresh(lastSnapshot, now: Date(), maximumAge: refreshInterval) {
                 state = .loaded(lastSnapshot)
                 return
             }
@@ -496,6 +496,11 @@ final class WeatherViewModel: ObservableObject {
 
             state = .error(error.localizedDescription)
         }
+    }
+
+    static func isFresh(_ snapshot: WeatherSnapshot, now: Date, maximumAge: TimeInterval) -> Bool {
+        let age = now.timeIntervalSince(snapshot.updatedAt)
+        return age >= 0 && age < maximumAge
     }
 
     private func loadWeatherSnapshot(using provider: WeatherProviding, location: CLLocation) async throws {

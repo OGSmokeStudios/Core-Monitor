@@ -493,7 +493,7 @@ enum HardwareRescueTextParser {
 }
 
 enum HardwareRescueFormatters {
-    static func date(_ date: Date) -> String {
-        date.formatted(date: .abbreviated, time: .standard)
+    static func date(_ date: Date, locale: Locale = AppLocaleStore.currentLocale) -> String {
+        date.formatted(Date.FormatStyle(date: .abbreviated, time: .standard).locale(locale))
     }
 }

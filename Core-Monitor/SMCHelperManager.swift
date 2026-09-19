@@ -15,7 +15,7 @@ import Darwin
 
 @MainActor
 final class SMCHelperManager: ObservableObject {
-    struct ControlMetadata: Equatable {
+    struct ControlMetadata: Equatable, Sendable {
         let modeKeyFormat: String
         let forceTestAvailable: Bool
     }
@@ -102,6 +102,20 @@ final class SMCHelperManager: ObservableObject {
 
     private let fileManager = FileManager.default
     private var diagnosticsTask: Task<Void, Never>?
+    private lazy var client = HelperXPCClient { [helperLabel] in
+        NSXPCConnection(machServiceName: helperLabel, options: .privileged)
+    }
+
+    func endControlSession() { client.disconnect() }
+
+    func renewControlLease() async -> Bool {
+        guard client.isConnected else { return false }
+        let result: ConnectionResult<Bool> = await withHelperConnection(timeout: 3) { proxy, finish in
+            proxy.renewControlLease { renewed, error in finish(renewed.boolValue, error as String?) }
+        }
+        if case .success(let renewed) = result { return renewed }
+        return false
+    }
 
     private init() {
         refreshStatus()
@@ -200,15 +214,16 @@ final class SMCHelperManager: ObservableObject {
 
     /// Executes the helper with the given arguments.
     /// Returns true on success.
-    func execute(arguments: [String]) -> Bool {
-        execute(arguments: arguments, allowInstall: true, timeout: 5)
+    func execute(arguments: [String]) async -> Bool {
+        await execute(arguments: arguments, allowInstall: true, timeout: 5)
     }
 
-    func executeIfInstalled(arguments: [String], timeout: TimeInterval = 5) -> Bool {
-        execute(arguments: arguments, allowInstall: false, timeout: timeout)
+    func executeIfInstalled(arguments: [String], timeout: TimeInterval = 5) async -> Bool {
+        await execute(arguments: arguments, allowInstall: false, timeout: timeout)
     }
 
-    private func execute(arguments: [String], allowInstall: Bool, timeout: TimeInterval) -> Bool {
+    private func execute(arguments: [String], allowInstall: Bool, timeout: TimeInterval) async -> Bool {
+        guard !Task.isCancelled else { return false }
         refreshStatus()
 
         if allowInstall {
@@ -224,7 +239,8 @@ final class SMCHelperManager: ObservableObject {
             }
         }
 
-        let didExecute = executeViaBlessedXPC(arguments: arguments, timeout: timeout)
+        let didExecute = await executeViaBlessedXPC(arguments: arguments, timeout: timeout)
+        guard !Task.isCancelled else { return false }
         guard didExecute == false, allowInstall, shouldAttemptHelperRepair(afterFailureMessage: statusMessage) else {
             return didExecute
         }
@@ -233,10 +249,11 @@ final class SMCHelperManager: ObservableObject {
             return false
         }
 
-        return executeViaBlessedXPC(arguments: arguments, timeout: timeout)
+        return await executeViaBlessedXPC(arguments: arguments, timeout: timeout)
     }
 
-    func readValue(key: String) -> Double? {
+    func readValue(key: String) async -> Double? {
+        guard !Task.isCancelled else { return nil }
         refreshStatus()
 
         guard fileManager.fileExists(atPath: installedHelperPath) else {
@@ -244,7 +261,7 @@ final class SMCHelperManager: ObservableObject {
             return nil
         }
 
-        let result = readValueViaHelper(key: key, timeout: 5)
+        let result = await readValueViaHelper(key: key, timeout: 5)
         switch result {
         case .success(let value):
             statusMessage = nil
@@ -254,11 +271,11 @@ final class SMCHelperManager: ObservableObject {
             statusMessage = message
             connectionState = .unreachable
 
-            guard shouldAttemptHelperRepair(afterFailureMessage: message), attemptRepairingStaleHelper() else {
+            guard !Task.isCancelled, shouldAttemptHelperRepair(afterFailureMessage: message), attemptRepairingStaleHelper() else {
                 return nil
             }
 
-            switch readValueViaHelper(key: key, timeout: 5) {
+            switch await readValueViaHelper(key: key, timeout: 5) {
             case .success(let value):
                 statusMessage = nil
                 connectionState = .reachable
@@ -271,14 +288,14 @@ final class SMCHelperManager: ObservableObject {
         }
     }
 
-    func readControlMetadata(timeout: TimeInterval = 1.0) -> ControlMetadata? {
+    func readControlMetadata(timeout: TimeInterval = 1.0) async -> ControlMetadata? {
         refreshStatus()
 
         guard fileManager.fileExists(atPath: installedHelperPath) else {
             return nil
         }
 
-        let result: ConnectionResult<ControlMetadata> = withHelperConnection(timeout: timeout) { proxy, finish in
+        let result: ConnectionResult<ControlMetadata> = await withHelperConnection(timeout: timeout) { proxy, finish in
             proxy.readControlMetadata { modeKeyFormat, forceTestAvailable, errorMessage in
                 guard let modeKeyFormat else {
                     finish(nil, errorMessage as String?)
@@ -473,15 +490,15 @@ final class SMCHelperManager: ObservableObject {
         return "'\(escaped)'"
     }
 
-    private func readValueViaHelper(key: String, timeout: TimeInterval) -> ConnectionResult<Double> {
-        withHelperConnection(timeout: timeout, perform: { proxy, finish in
+    private func readValueViaHelper(key: String, timeout: TimeInterval) async -> ConnectionResult<Double> {
+        await withHelperConnection(timeout: timeout, perform: { proxy, finish in
             proxy.readValue(key) { value, errorMessage in
                 finish(value?.doubleValue, errorMessage as String?)
             }
         })
     }
 
-    private func executeViaBlessedXPC(arguments: [String], timeout: TimeInterval) -> Bool {
+    private func executeViaBlessedXPC(arguments: [String], timeout: TimeInterval) async -> Bool {
         guard !arguments.isEmpty else {
             statusMessage = "Helper command missing."
             return false
@@ -497,9 +514,16 @@ final class SMCHelperManager: ObservableObject {
                 statusMessage = "Invalid helper arguments."
                 return false
             }
-            result = withHelperConnection(timeout: timeout) { proxy, finish in
-                proxy.setFanManual(fanID, rpm: rpm) { errorMessage in
-                    finish(true, errorMessage as String?)
+            result = await withHelperConnection(timeout: timeout) { proxy, finish in
+                // Never issue manual writes to an older helper without a watchdog.
+                proxy.readSafetyVersion { version in
+                    guard version.intValue >= 1 else {
+                        finish(nil, "Reinstall the privileged helper to enable supervised fan control.")
+                        return
+                    }
+                    proxy.setFanManual(fanID, rpm: rpm) { errorMessage in
+                        finish(true, errorMessage as String?)
+                    }
                 }
             }
 
@@ -509,7 +533,7 @@ final class SMCHelperManager: ObservableObject {
                 statusMessage = "Invalid helper arguments."
                 return false
             }
-            result = withHelperConnection(timeout: timeout) { proxy, finish in
+            result = await withHelperConnection(timeout: timeout) { proxy, finish in
                 proxy.setFanAuto(fanID) { errorMessage in
                     finish(true, errorMessage as String?)
                 }
@@ -520,7 +544,7 @@ final class SMCHelperManager: ObservableObject {
                 statusMessage = "Invalid helper arguments."
                 return false
             }
-            result = withHelperConnection(timeout: timeout) { proxy, finish in
+            result = await withHelperConnection(timeout: timeout) { proxy, finish in
                 proxy.readValue(arguments[1]) { _, errorMessage in
                     finish(true, errorMessage as String?)
                 }
@@ -696,55 +720,15 @@ final class SMCHelperManager: ObservableObject {
         }
     }
 
-    private func withHelperConnection<Value>(
+    private func withHelperConnection<Value: Sendable>(
         timeout: TimeInterval,
         perform: (SMCHelperXPCProtocol, @escaping (Value?, String?) -> Void) -> Void
-    ) -> ConnectionResult<Value> {
-        let connection = NSXPCConnection(machServiceName: helperLabel, options: .privileged)
-        connection.remoteObjectInterface = NSXPCInterface(with: SMCHelperXPCProtocol.self)
-
-        var remoteValue: Value?
-        var remoteError: String?
-        let semaphore = DispatchSemaphore(value: 0)
-
-        connection.invalidationHandler = {
-            semaphore.signal()
+    ) async -> ConnectionResult<Value> {
+        do {
+            return .success(try await client.request(timeout: timeout, perform: perform))
+        } catch {
+            return .failure(Self.decorateConnectionFailure(error.localizedDescription))
         }
-        connection.interruptionHandler = {
-            semaphore.signal()
-        }
-        connection.resume()
-
-        guard let proxy = connection.remoteObjectProxyWithErrorHandler({ error in
-            remoteError = error.localizedDescription
-            semaphore.signal()
-        }) as? SMCHelperXPCProtocol else {
-            connection.invalidate()
-            return .failure("Failed to create helper connection.")
-        }
-
-        perform(proxy) { value, errorMessage in
-            remoteValue = value
-            remoteError = errorMessage
-            semaphore.signal()
-        }
-
-        let waitResult = semaphore.wait(timeout: .now() + timeout)
-        connection.invalidate()
-
-        if waitResult == .timedOut {
-            return .failure("Timed out while waiting for privileged helper.")
-        }
-
-        if let remoteError {
-            return .failure(Self.decorateConnectionFailure(remoteError))
-        }
-
-        guard let remoteValue else {
-            return .failure(Self.decorateConnectionFailure(nil))
-        }
-
-        return .success(remoteValue)
     }
 
     private nonisolated static func probeConnection(label: String) -> ProbeOutcome {
