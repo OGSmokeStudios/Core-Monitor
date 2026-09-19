@@ -485,7 +485,10 @@ final class CoreMonitorApplicationDelegate: NSObject, NSApplicationDelegate {
             coordinator: coordinator,
             startupManager: startupManager
         ) { [weak self] in
-            self?.restoreAccessoryActivationPolicyIfNeeded()
+            // windowWillClose arrives before AppKit finishes hiding the window.
+            DispatchQueue.main.async { [weak self] in
+                self?.restoreAccessoryActivationPolicyIfNeeded()
+            }
         }
         debugLaunch("dashboardController created")
         dashboardController = controller
