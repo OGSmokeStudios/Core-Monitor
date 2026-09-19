@@ -336,6 +336,7 @@ final class CoreMonitorApplicationDelegate: NSObject, NSApplicationDelegate {
     }
 
     func openDashboard() {
+        guard didBootstrapPrimaryInstance else { return }
         guard shouldBootstrapInteractiveApp else { return }
         Self.logger.notice("Open dashboard requested activationPolicy=\(String(describing: NSApp.activationPolicy()), privacy: .public)")
         setDashboardActivationPolicy()
