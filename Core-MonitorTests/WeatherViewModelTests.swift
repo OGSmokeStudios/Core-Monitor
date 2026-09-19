@@ -188,13 +188,37 @@ final class WeatherViewModelTests: XCTestCase {
             XCTFail("Expected a loaded weather snapshot from the fallback provider.")
         }
     }
+    func testFailedRefreshDiscardsExpiredWeather() async {
+        let provider = RecordingWeatherProvider()
+        let access = MockWeatherLocationAccess(status: .authorizedAlways, currentLocation: CLLocation(latitude: 1, longitude: 1))
+        let model = WeatherViewModel(provider: provider, locationAccess: access, weatherCapabilityEnabled: { true })
+        await model.refreshNow()
+        provider.shouldFail = true
+        await model.refreshNow()
+        guard case .error = model.state else { return XCTFail("Expired weather must not appear current.") }
+    }
+
+    func testFailedRefreshCanKeepRecentWeather() async {
+        let provider = RecordingWeatherProvider()
+        provider.updatedAt = Date()
+        let access = MockWeatherLocationAccess(status: .authorizedAlways, currentLocation: CLLocation(latitude: 1, longitude: 1))
+        let model = WeatherViewModel(provider: provider, locationAccess: access, weatherCapabilityEnabled: { true })
+        await model.refreshNow()
+        provider.shouldFail = true
+        await model.refreshNow()
+        guard case .loaded = model.state else { return XCTFail("A recent reading may survive a transient failure.") }
+    }
+
 }
 
 private final class RecordingWeatherProvider: WeatherProviding {
     private(set) var requestedLocation: CLLocation?
     var onRequest: ((CLLocation) -> Void)?
+    var shouldFail = false
+    var updatedAt = Date(timeIntervalSince1970: 1_000)
 
     func currentWeather(for location: CLLocation) async throws -> WeatherSnapshot {
+        if shouldFail { throw FailingWeatherProvider.TestError() }
         requestedLocation = location
         onRequest?(location)
         return WeatherSnapshot(
@@ -207,7 +231,7 @@ private final class RecordingWeatherProvider: WeatherProviding {
             low: 18,
             feelsLike: 20,
             humidity: 52,
-            updatedAt: Date(timeIntervalSince1970: 1_000)
+            updatedAt: updatedAt
         )
     }
 }
