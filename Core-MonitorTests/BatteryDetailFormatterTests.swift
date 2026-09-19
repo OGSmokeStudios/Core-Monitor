@@ -1,6 +1,7 @@
 import XCTest
 @testable import Core_Monitor
 
+@MainActor
 final class BatteryDetailFormatterTests: XCTestCase {
     func testChargingRuntimeUsesPowerAdapterLanguage() {
         var info = BatteryInfo()
@@ -32,5 +33,25 @@ final class BatteryDetailFormatterTests: XCTestCase {
         XCTAssertEqual(BatteryDetailFormatter.temperatureDescription(31.26), "31.3 °C")
         XCTAssertEqual(BatteryDetailFormatter.voltageDescription(12.345), "12.35 V")
         XCTAssertEqual(BatteryDetailFormatter.amperageDescription(-1.234), "-1.23 A")
+    }
+
+    func testElectricalValuesFollowExplicitLocale() {
+        let locale = Locale(identifier: "de_DE")
+        XCTAssertEqual(BatteryDetailFormatter.temperatureDescription(31.26, locale: locale), "31,3 °C")
+        XCTAssertEqual(BatteryDetailFormatter.voltageDescription(12.345, locale: locale), "12,35 V")
+        XCTAssertEqual(BatteryDetailFormatter.amperageDescription(-1.234, locale: locale), "-1,23 A")
+    }
+
+    func testBatteryLabelsAndRuntimeFollowSelectedLanguage() throws {
+        let locale = Locale(identifier: "sv_SE")
+        var info = BatteryInfo()
+        info.hasBattery = true
+        info.timeRemainingMinutes = 42
+        XCTAssertEqual(BatteryDetailFormatter.sourceDescription(for: info, locale: locale), "Internt batteri")
+        let runtime = try XCTUnwrap(BatteryDetailFormatter.runtimeDescription(for: info, locale: locale))
+        XCTAssertTrue(runtime.hasSuffix(" kvar"), runtime)
+        info.isCharging = true
+        info.timeRemainingMinutes = 0
+        XCTAssertEqual(BatteryDetailFormatter.runtimeDescription(for: info, locale: locale), "Snart klart")
     }
 }
