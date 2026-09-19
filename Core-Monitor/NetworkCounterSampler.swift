@@ -46,6 +46,7 @@ enum NetworkCounterReader {
                 if errno == ENOMEM { continue }
                 return nil
             }
+            guard length <= data.count else { continue }
             return data.withUnsafeBytes { buffer in
                 decode(UnsafeRawBufferPointer(rebasing: buffer.prefix(length)))
             }

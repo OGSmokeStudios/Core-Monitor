@@ -4,6 +4,7 @@ import SwiftUI
 /// cards. Every card opens its section.
 struct OverviewPage: View {
     @ObservedObject var systemMonitor: SystemMonitor
+    @Environment(\.locale) private var locale
     let openSection: (MonitorSection) -> Void
 
     private let columns = [GridItem(.adaptive(minimum: 210), spacing: 12)]
@@ -120,7 +121,7 @@ struct OverviewPage: View {
         let caption: String
         if let percent = battery.chargePercent, battery.hasBattery {
             reading = "\(percent)%"
-            caption = BatteryDetailFormatter.powerStateDescription(for: battery)
+            caption = BatteryDetailFormatter.powerStateDescription(for: battery, locale: locale)
         } else {
             reading = ReadingFormat.watts(snapshot.totalSystemWatts)
             caption = "System power draw"
