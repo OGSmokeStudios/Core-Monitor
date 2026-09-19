@@ -176,13 +176,16 @@ final class SMCHelperManager: ObservableObject {
         diagnosticsTask?.cancel()
         connectionState = .checking
 
-        let helperLabel = helperLabel
-        diagnosticsTask = Task.detached(priority: .utility) {
-            let outcome = Self.probeConnection(label: helperLabel)
-            guard Task.isCancelled == false else { return }
-
-            await MainActor.run {
-                SMCHelperManager.shared.applyProbeOutcome(outcome)
+        diagnosticsTask = Task { @MainActor [weak self] in
+            guard let self else { return }
+            let result: ConnectionResult<Bool> = await withHelperConnection(timeout: 1.5) { proxy, finish in
+                // Any reply establishes reachability; a fanless Mac may lack FNum.
+                proxy.readValue("FNum") { _, _ in finish(true, nil) }
+            }
+            guard !Task.isCancelled else { return }
+            switch result {
+            case .success: applyProbeOutcome(.reachable)
+            case .failure(let message): applyProbeOutcome(.failure(message))
             }
         }
     }
@@ -729,54 +732,6 @@ final class SMCHelperManager: ObservableObject {
         } catch {
             return .failure(Self.decorateConnectionFailure(error.localizedDescription))
         }
-    }
-
-    private nonisolated static func probeConnection(label: String) -> ProbeOutcome {
-        let connection = NSXPCConnection(machServiceName: label, options: .privileged)
-        connection.remoteObjectInterface = NSXPCInterface(with: SMCHelperXPCProtocol.self)
-
-        var remoteError: String?
-        var didReceiveReply = false
-        let semaphore = DispatchSemaphore(value: 0)
-
-        connection.invalidationHandler = {
-            semaphore.signal()
-        }
-        connection.interruptionHandler = {
-            semaphore.signal()
-        }
-        connection.resume()
-
-        guard let proxy = connection.remoteObjectProxyWithErrorHandler({ error in
-            remoteError = error.localizedDescription
-            semaphore.signal()
-        }) as? SMCHelperXPCProtocol else {
-            connection.invalidate()
-            return .failure("Failed to create helper connection.")
-        }
-
-        proxy.readValue("FNum") { _, errorMessage in
-            didReceiveReply = true
-            remoteError = errorMessage as String?
-            semaphore.signal()
-        }
-
-        let waitResult = semaphore.wait(timeout: .now() + 1.5)
-        connection.invalidate()
-
-        if waitResult == .timedOut {
-            return .failure("Timed out while waiting for privileged helper.")
-        }
-
-        if didReceiveReply {
-            return .reachable
-        }
-
-        if let remoteError {
-            return .failure(Self.decorateConnectionFailure(remoteError))
-        }
-
-        return .failure(Self.decorateConnectionFailure(nil))
     }
 
     private nonisolated static func decorateConnectionFailure(_ rawMessage: String?) -> String {
